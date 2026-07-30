@@ -2,4 +2,4 @@
 set -euo pipefail
 
 mkdir -p "{{ repo_vm_clamav_root }}"
-freshclam --stdout --datadir="{{ repo_vm_clamav_root }}" --checks=12
+freshclam --stdout --user=clamav --datadir="{{ repo_vm_clamav_root }}" --checks=12

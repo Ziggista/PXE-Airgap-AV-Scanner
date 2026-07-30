@@ -29,6 +29,14 @@
     - "{{ repo_vm_definitions_root }}"
     - "{{ repo_vm_clamav_root }}"
 
+- name: Ensure ClamAV definition directory permissions
+  ansible.builtin.file:
+    path: "{{ repo_vm_clamav_root }}"
+    state: directory
+    owner: clamav
+    group: clamav
+    mode: "0755"
+
 - name: Render aptly configuration
   ansible.builtin.template:
     src: aptly.conf.j2
