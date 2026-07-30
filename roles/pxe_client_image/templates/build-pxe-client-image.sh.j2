@@ -11,11 +11,13 @@ lb config \
   --mode ubuntu \
   --architectures amd64 \
   --binary-images netboot \
+  --bootloader syslinux \
   --debian-installer false \
   --distribution "{{ ubuntu_codename }}" \
   --archive-areas "main universe" \
   --linux-flavours generic \
   --memtest none \
+  --syslinux-theme live-build \
   --bootappend-live "boot=casper components username={{ pxe_client_username }} hostname={{ pxe_client_hostname }}"
 
 lb build
