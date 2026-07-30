@@ -1,0 +1,28 @@
+#cloud-config
+hostname: av-repo-vm
+manage_etc_hosts: true
+package_update: true
+package_upgrade: true
+ssh_pwauth: false
+users:
+  - name: ziggi-py
+    gecos: Ziggi Python Automation
+    groups: adm, sudo
+    shell: /bin/bash
+    lock_passwd: true
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOmjwNUVLGQIWdKeWAtIo1Kzv2WIx7r97Xz+2lmE2xEl ziggi-py-control-host
+packages:
+  - ca-certificates
+  - curl
+  - git
+  - openssh-server
+  - python3
+  - python3-apt
+  - python3-venv
+  - qemu-guest-agent
+  - rsync
+runcmd:
+  - systemctl enable --now ssh
+  - systemctl enable --now qemu-guest-agent
