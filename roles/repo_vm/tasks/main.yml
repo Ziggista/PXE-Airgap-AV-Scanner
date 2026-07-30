@@ -89,6 +89,13 @@
     group: root
     mode: "0755"
 
+- name: Stop background freshclam service before manual sync
+  ansible.builtin.service:
+    name: clamav-freshclam
+    state: stopped
+    enabled: false
+  failed_when: false
+
 - name: Refresh ClamAV definitions on proxy node
   ansible.builtin.command: /usr/local/sbin/sync-clamav-definitions.sh
   register: clamav_sync_result
