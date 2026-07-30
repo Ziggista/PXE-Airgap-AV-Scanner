@@ -13,7 +13,7 @@ Working state reached:
 - seed ISO: `D:\AV\cloudinit\control-node-seed.iso`
 - current cloud-init source: `DataSourceNoCloud [seed=/dev/sr0]`
 - login user: `ziggi-ubuntu`
-- password location: [cloudinit/control-node/user-data](C:/Users/Ziggi/AV/cloudinit/control-node/user-data)
+- password location: set locally in [cloudinit/control-node/user-data](C:/Users/Ziggi/AV/cloudinit/control-node/user-data) before build
 
 ## Important findings
 

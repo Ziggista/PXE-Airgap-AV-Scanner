@@ -47,7 +47,7 @@ The seed currently installs:
 The seeded build currently uses:
 
 - username: `ziggi-ubuntu`
-- password: defined in [cloudinit/control-node/user-data](C:/Users/Ziggi/AV/cloudinit/control-node/user-data)
+- password: set locally before build in [cloudinit/control-node/user-data](C:/Users/Ziggi/AV/cloudinit/control-node/user-data)
 
 Rotate the seeded password immediately after the install completes.
 
