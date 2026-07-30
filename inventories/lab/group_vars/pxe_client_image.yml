@@ -24,7 +24,6 @@ pxe_client_packages:
   - ntfs-3g
   - openbox
   - pcmanfm
-  - policykit-1
   - python3
   - python3-gi
   - dosfstools
