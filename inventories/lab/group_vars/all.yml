@@ -1,6 +1,7 @@
 ---
 ansible_user: ziggi-py
 ansible_become: true
+ansible_ssh_private_key_file: ~/.ssh/ziggi-py-host-ed25519
 
 project_root: /opt/av-pxe-tooling
 repo_root: /srv/av-pxe
