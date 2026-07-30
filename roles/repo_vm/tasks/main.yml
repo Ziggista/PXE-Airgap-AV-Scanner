@@ -81,14 +81,6 @@
     group: root
     mode: "0644"
 
-- name: Render freshclam mirror sync config
-  ansible.builtin.template:
-    src: freshclam-av-proxy.conf.j2
-    dest: /etc/clamav/freshclam-av-proxy.conf
-    owner: root
-    group: root
-    mode: "0644"
-
 - name: Render ClamAV definition sync helper
   ansible.builtin.template:
     src: sync-clamav-definitions.sh.j2
