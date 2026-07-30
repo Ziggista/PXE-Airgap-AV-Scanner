@@ -23,6 +23,15 @@
     - "{{ pxe_server_livebuild_root }}"
     - "{{ pxe_server_client_publish_dir }}"
 
+- name: Render PXE lab netplan
+  ansible.builtin.template:
+    src: 60-av-pxe-lab.yaml.j2
+    dest: /etc/netplan/60-av-pxe-lab.yaml
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Apply netplan
+
 - name: Render dnsmasq configuration
   ansible.builtin.template:
     src: dnsmasq-av-build.conf.j2

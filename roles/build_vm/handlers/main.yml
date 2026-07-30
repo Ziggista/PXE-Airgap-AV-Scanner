@@ -8,3 +8,6 @@
   ansible.builtin.service:
     name: nginx
     state: reloaded
+
+- name: Apply netplan
+  ansible.builtin.command: netplan apply

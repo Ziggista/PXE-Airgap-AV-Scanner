@@ -1,0 +1,11 @@
+network:
+  version: 2
+  ethernets:
+    {{ pxe_server_interface }}:
+      match:
+        macaddress: "{{ pxe_server_interface_mac }}"
+      set-name: "{{ pxe_server_interface }}"
+      dhcp4: false
+      dhcp6: false
+      addresses:
+        - {{ pxe_server_interface_address }}

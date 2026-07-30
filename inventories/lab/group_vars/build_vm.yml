@@ -14,7 +14,9 @@ pxe_server_proxy_artifacts_base_url: "{{ pxe_server_proxy_base_url }}/artifacts"
 pxe_server_client_image_name: av-client
 pxe_server_client_publish_dir: "{{ pxe_root }}/images/{{ pxe_server_client_image_name }}"
 pxe_server_definitions_publish_dir: "{{ pxe_root }}/definitions/clamav"
-pxe_server_interface: ""
+pxe_server_interface: "eth1"
+pxe_server_interface_mac: "00:15:5d:01:1c:0c"
+pxe_server_interface_address: "192.168.50.2/24"
 pxe_server_dhcp_range_start: 192.168.50.100
 pxe_server_dhcp_range_end: 192.168.50.200
 pxe_server_dhcp_lease: 12h
