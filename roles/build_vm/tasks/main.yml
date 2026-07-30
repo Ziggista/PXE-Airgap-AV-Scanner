@@ -32,6 +32,9 @@
     mode: "0644"
   notify: Apply netplan
 
+- name: Apply PXE lab netplan before PXE service changes
+  ansible.builtin.meta: flush_handlers
+
 - name: Render dnsmasq configuration
   ansible.builtin.template:
     src: dnsmasq-av-build.conf.j2
