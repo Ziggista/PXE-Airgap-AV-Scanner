@@ -1,7 +1,5 @@
 port=0
 log-dhcp
-enable-tftp
-tftp-root={{ tftp_root }}
 dhcp-boot=pxelinux.0
 dhcp-range={{ pxe_server_dhcp_range_start }},{{ pxe_server_dhcp_range_end }},{{ pxe_server_dhcp_lease }}
 {% if pxe_server_interface %}
