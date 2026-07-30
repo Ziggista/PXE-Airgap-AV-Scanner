@@ -22,6 +22,7 @@
     - "{{ pxe_server_workspace }}"
     - "{{ pxe_server_livebuild_root }}"
     - "{{ pxe_server_client_publish_dir }}"
+    - "{{ pxe_server_tftp_client_publish_dir }}"
 
 - name: Render PXE lab netplan
   ansible.builtin.template:

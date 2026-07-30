@@ -13,6 +13,7 @@ pxe_server_proxy_definitions_base_url: "{{ pxe_server_proxy_base_url }}/definiti
 pxe_server_proxy_artifacts_base_url: "{{ pxe_server_proxy_base_url }}/artifacts"
 pxe_server_client_image_name: av-client
 pxe_server_client_publish_dir: "{{ pxe_root }}/images/{{ pxe_server_client_image_name }}"
+pxe_server_tftp_client_publish_dir: "{{ tftp_root }}/images/{{ pxe_server_client_image_name }}"
 pxe_server_definitions_publish_dir: "{{ pxe_root }}/definitions/clamav"
 pxe_server_interface: "eth1"
 pxe_server_interface_mac: "00:15:5d:01:1c:0c"

@@ -3,11 +3,16 @@ set -euo pipefail
 
 WORKSPACE="{{ pxe_client_livebuild_root }}"
 PUBLISH="{{ pxe_client_publish_dir }}"
+TFTP_PUBLISH="{{ pxe_server_tftp_client_publish_dir }}"
 CASPER_DIR="$WORKSPACE/binary/casper"
 
 mkdir -p "$PUBLISH"
+mkdir -p "$TFTP_PUBLISH"
 cp -f "$(find "$CASPER_DIR" -maxdepth 1 -name 'vmlinuz-*' | head -n 1)" "$PUBLISH/vmlinuz"
 cp -f "$(find "$CASPER_DIR" -maxdepth 1 -name 'initrd.img-*' | head -n 1)" "$PUBLISH/initrd"
 cp -f "$CASPER_DIR/filesystem.squashfs" "$PUBLISH/filesystem.squashfs"
+cp -f "$PUBLISH/vmlinuz" "$TFTP_PUBLISH/vmlinuz"
+cp -f "$PUBLISH/initrd" "$TFTP_PUBLISH/initrd"
 
 echo "Published PXE client assets into $PUBLISH"
+echo "Published PXE TFTP boot files into $TFTP_PUBLISH"
