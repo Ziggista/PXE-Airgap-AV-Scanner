@@ -1,0 +1,13 @@
+[Unit]
+Description=Sync AV definitions into RAM before offline scanning
+Wants=network-online.target
+After=network-online.target NetworkManager.service
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/sync-runtime-definitions.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -25,21 +25,28 @@ This workspace prepares a PXE-booted Ubuntu live client that:
 
    `ansible-playbook playbooks/build-pxe-client-assets.yml`
 
-3. If manual troubleshooting is needed, sync ClamAV definitions from the proxy node:
+3. For daily signature refresh without rebuilding the image:
+
+   `ansible-playbook playbooks/sync-pxe-definitions.yml`
+
+   The PXE client downloads current definitions from the PXE server during boot, before the operator disconnects the network.
+
+4. If manual troubleshooting is needed, sync ClamAV definitions into the baked image workspace:
 
    `sudo {{ pxe_client_output_dir }}/sync-clamav-from-proxy.sh`
 
-4. Build the live image:
+5. Build the live image:
 
    `sudo {{ pxe_client_output_dir }}/build-pxe-client-image.sh`
 
-5. Publish PXE assets:
+6. Publish PXE assets:
 
    `sudo {{ pxe_client_output_dir }}/publish-pxe-client-assets.sh`
 
 ## Session behavior
 
 - Autologin user: `{{ pxe_client_username }}`
+- Before the desktop is considered ready, `av-definition-sync.service` pulls current ClamAV definitions from `{{ pxe_client_runtime_definitions_base_url }}`
 - The login session launches `/usr/local/bin/av-network-banner.py`
 - Source media should be mounted with:
 

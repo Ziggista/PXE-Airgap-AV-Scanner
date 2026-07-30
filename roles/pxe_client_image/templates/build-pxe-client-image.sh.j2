@@ -15,7 +15,8 @@ lb config \
   --distribution "{{ ubuntu_codename }}" \
   --archive-areas "main universe" \
   --linux-flavours generic \
-  --bootappend-live "boot=live components username={{ pxe_client_username }} hostname={{ pxe_client_hostname }}"
+  --memtest none \
+  --bootappend-live "boot=casper components username={{ pxe_client_username }} hostname={{ pxe_client_hostname }}"
 
 lb build
 

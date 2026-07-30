@@ -6,6 +6,7 @@ pxe_client_livebuild_root: "{{ pxe_server_livebuild_root }}"
 pxe_client_username: scanner
 pxe_client_hostname: av-pxe-client
 pxe_client_proxy_definitions_base_url: "{{ pxe_server_proxy_definitions_base_url }}"
+pxe_client_runtime_definitions_base_url: "{{ pxe_server_base_url }}/definitions/clamav"
 pxe_client_publish_dir: "{{ pxe_server_client_publish_dir }}"
 pxe_client_desktop_banner_color: "#a40000"
 pxe_client_network_test_target: "{{ pxe_server_proxy_host }}"

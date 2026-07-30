@@ -15,12 +15,15 @@ This node is the PXE boot and image build server.
 - Client image workspace: `{{ pxe_server_workspace }}`
 - Live-build root: `{{ pxe_server_livebuild_root }}`
 - Published client image path: `{{ pxe_server_client_publish_dir }}`
+- Published definitions path: `{{ pxe_server_definitions_publish_dir }}`
 
 ## Basic sequence
 
 1. Sync definitions and any staged artifacts from the proxy node:
 
    `sudo /usr/local/sbin/sync-from-proxy.sh`
+
+   This updates the PXE server's published definition tree without rebuilding the client image.
 
 2. Build or refresh the client image workspace:
 
@@ -33,3 +36,12 @@ This node is the PXE boot and image build server.
 4. Publish `vmlinuz`, `initrd`, and `filesystem.squashfs` into:
 
    `{{ pxe_server_client_publish_dir }}`
+
+## Daily definition refresh
+
+Run these Ansible playbooks from the control node:
+
+1. `ansible-playbook playbooks/repo-vm.yml`
+2. `ansible-playbook playbooks/sync-pxe-definitions.yml`
+
+This updates ClamAV signatures on the proxy and PXE server without rebuilding the live image.

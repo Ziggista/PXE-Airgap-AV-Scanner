@@ -1,0 +1,8 @@
+---
+- name: Sync published definitions from proxy to PXE server
+  hosts: build_vm
+  become: true
+  vars:
+    pxe_server_sync_from_proxy_now: true
+  roles:
+    - role: build_vm

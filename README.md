@@ -98,6 +98,7 @@ python .\tools\update_local_repo.py
 - Includes a control-node playbook path for the Ubuntu Ansible runner, including the `ziggi-py` automation user and guarded third-party repo handling.
 - Includes a PXE client image role that stages an autologin desktop, disconnect banner, read-only source media mounts, gated writable destination mounts, and offline scan helpers.
 - Includes a `build-pxe-client-assets.yml` playbook to sync ClamAV definitions from the proxy and publish PXE boot assets from the build VM.
+- Includes a `sync-pxe-definitions.yml` playbook so daily ClamAV signature updates can flow proxy -> PXE server -> PXE client boot without rebuilding the full client image.
 
 ## What still needs implementation
 

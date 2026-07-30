@@ -18,6 +18,7 @@ This project uses four runtime nodes:
    - client image build workspace
    - points upstream to the proxy node
    - built and maintained by Ansible from this repository
+   - republishes current AV definitions for booting clients
 
 4. `pxe client node`
    - boots from network
@@ -26,3 +27,4 @@ This project uses four runtime nodes:
    - read-only source media handling
    - writable destination media blocked until scans succeed
    - build artifacts are generated on the PXE server via `playbooks/build-pxe-client-assets.yml`
+   - refreshes ClamAV definitions from the PXE server before the operator disconnects network access

@@ -22,6 +22,8 @@
     - "{{ pxe_client_livebuild_root }}/config/includes.chroot/etc/xdg/autostart"
     - "{{ pxe_client_livebuild_root }}/config/includes.chroot/usr/local/bin"
     - "{{ pxe_client_livebuild_root }}/config/includes.chroot/opt/av/definitions/clamav"
+    - "{{ pxe_client_livebuild_root }}/config/includes.chroot/etc/systemd/system"
+    - "{{ pxe_client_livebuild_root }}/config/includes.chroot/etc/systemd/system/multi-user.target.wants"
     - "{{ pxe_client_livebuild_root }}/config/package-lists"
     - "{{ pxe_client_livebuild_root }}/config/hooks/live"
 
@@ -56,6 +58,28 @@
     owner: root
     group: root
     mode: "0755"
+
+- name: Render PXE client runtime definition sync script
+  ansible.builtin.template:
+    src: sync-runtime-definitions.sh.j2
+    dest: "{{ pxe_client_livebuild_root }}/config/includes.chroot/usr/local/bin/sync-runtime-definitions.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render PXE client runtime definition sync service
+  ansible.builtin.template:
+    src: av-definition-sync.service.j2
+    dest: "{{ pxe_client_livebuild_root }}/config/includes.chroot/etc/systemd/system/av-definition-sync.service"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable PXE client runtime definition sync service
+  ansible.builtin.file:
+    src: /etc/systemd/system/av-definition-sync.service
+    dest: "{{ pxe_client_livebuild_root }}/config/includes.chroot/etc/systemd/system/multi-user.target.wants/av-definition-sync.service"
+    state: link
 
 - name: Render PXE client source media mount helper
   ansible.builtin.template:

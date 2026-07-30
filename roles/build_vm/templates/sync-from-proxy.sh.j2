@@ -1,14 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-mkdir -p "{{ pxe_server_workspace }}/proxy-sync/clamav"
+STAGE="{{ pxe_server_workspace }}/proxy-sync/clamav"
+PUBLISH="{{ pxe_server_definitions_publish_dir }}"
+
+mkdir -p "$STAGE"
 mkdir -p "{{ pxe_server_workspace }}/proxy-sync/artifacts"
+mkdir -p "$PUBLISH"
 
 curl -fsSL "{{ pxe_server_proxy_base_url }}/" >/dev/null
+fetched=0
 for file in main.cvd daily.cvd bytecode.cvd main.cld daily.cld bytecode.cld; do
-  if curl -fsSL "{{ pxe_server_proxy_definitions_base_url }}/clamav/${file}" -o "{{ pxe_server_workspace }}/proxy-sync/clamav/${file}"; then
+  if curl -fsSL "{{ pxe_server_proxy_definitions_base_url }}/clamav/${file}" -o "$STAGE/${file}"; then
     echo "Fetched ${file}"
+    fetched=1
   fi
 done
 
-echo "Proxy definitions staged under {{ pxe_server_workspace }}/proxy-sync/clamav"
+if [[ "$fetched" -eq 0 ]]; then
+  echo "No ClamAV definition files were fetched from the proxy." >&2
+  exit 1
+fi
+
+rsync -a --delete "$STAGE"/ "$PUBLISH"/
+echo "Published ClamAV definitions under $PUBLISH"

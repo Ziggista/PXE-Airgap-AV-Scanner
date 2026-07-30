@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 import socket
+from pathlib import Path
 import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
 TARGET = "{{ pxe_client_network_test_target }}"
 PORT = {{ pxe_client_network_test_port }}
+STATUS_FILE = Path("/run/av/definition-sync.status")
+
+
+def definition_status():
+    if not STATUS_FILE.exists():
+        return "pending"
+    return STATUS_FILE.read_text(encoding="utf-8").strip() or "pending"
 
 
 def network_reachable():
@@ -28,27 +36,49 @@ class Banner(Gtk.Window):
 
         header = Gtk.Label()
         header.set_markup(
-            "<span foreground='white' background='{{ pxe_client_desktop_banner_color }}' size='18000'><b>REMOVE THE NETWORK CONNECTION NOW</b></span>"
+            "<span foreground='white' background='{{ pxe_client_desktop_banner_color }}' size='18000'><b>DISCONNECT ONLY AFTER DEFINITION SYNC IS READY</b></span>"
         )
 
         text = Gtk.Label(
-            label="This client is intended to scan public media offline. Disconnect network access before handling media, then use the test button below."
+            label="This client is intended to scan public media offline. Wait for AV definition sync to complete, disconnect network access, then use the test button below."
         )
         text.set_line_wrap(True)
 
-        self.status = Gtk.Label(label="Network test has not been run yet.")
+        self.status = Gtk.Label(label="")
+        self.refresh_status()
 
         button = Gtk.Button(label="Test Network Disconnected")
         button.connect("clicked", self.on_test)
+        refresh = Gtk.Button(label="Refresh Readiness")
+        refresh.connect("clicked", self.on_refresh)
 
         box.pack_start(header, False, False, 0)
         box.pack_start(text, False, False, 0)
         box.pack_start(self.status, False, False, 0)
+        box.pack_start(refresh, False, False, 0)
         box.pack_start(button, False, False, 0)
 
         self.add(box)
 
+    def refresh_status(self):
+        status = definition_status()
+        if status == "ready":
+            self.status.set_markup("<span foreground='green'><b>Definition sync complete. Disconnect the network, then run the network test.</b></span>")
+        elif status == "failed":
+            self.status.set_markup("<span foreground='red'><b>Definition sync failed. Do not disconnect until this is corrected.</b></span>")
+        elif status == "running":
+            self.status.set_markup("<span foreground='orange'><b>Definition sync is still running. Wait before disconnecting the network.</b></span>")
+        else:
+            self.status.set_markup("<span foreground='orange'><b>Definition sync status is pending. Refresh before disconnecting the network.</b></span>")
+
+    def on_refresh(self, _button):
+        self.refresh_status()
+
     def on_test(self, _button):
+        self.refresh_status()
+        if definition_status() != "ready":
+            self.status.set_markup("<span foreground='red'><b>Definition sync is not ready yet. Keep the network connected until sync completes.</b></span>")
+            return
         if network_reachable():
             self.status.set_markup("<span foreground='red'><b>Network is still reachable. Disconnect it before scanning.</b></span>")
         else:

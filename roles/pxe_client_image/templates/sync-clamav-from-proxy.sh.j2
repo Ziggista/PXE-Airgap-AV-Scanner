@@ -3,10 +3,15 @@ set -euo pipefail
 
 TARGET="{{ pxe_client_livebuild_root }}/config/includes.chroot/opt/av/definitions/clamav"
 mkdir -p "$TARGET"
-curl -fsSL "{{ pxe_client_proxy_definitions_base_url }}/clamav/" >/dev/null
+fetched=0
 for file in main.cvd daily.cvd bytecode.cvd main.cld daily.cld bytecode.cld; do
   if curl -fsSL "{{ pxe_client_proxy_definitions_base_url }}/clamav/${file}" -o "$TARGET/${file}"; then
     echo "Fetched ${file}"
+    fetched=1
   fi
 done
+if [[ "$fetched" -eq 0 ]]; then
+  echo "No ClamAV definition files were fetched." >&2
+  exit 1
+fi
 echo "ClamAV definitions staged under $TARGET"

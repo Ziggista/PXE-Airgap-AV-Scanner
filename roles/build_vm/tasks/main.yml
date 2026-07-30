@@ -17,6 +17,8 @@
     - "{{ tftp_root }}/pxelinux.cfg"
     - "{{ pxe_root }}/images"
     - "{{ pxe_root }}/artifacts"
+    - "{{ pxe_root }}/definitions"
+    - "{{ pxe_server_definitions_publish_dir }}"
     - "{{ pxe_server_workspace }}"
     - "{{ pxe_server_livebuild_root }}"
     - "{{ pxe_server_client_publish_dir }}"
@@ -77,6 +79,12 @@
     owner: root
     group: root
     mode: "0755"
+
+- name: Sync definitions from proxy onto PXE server
+  ansible.builtin.command: /usr/local/sbin/sync-from-proxy.sh
+  when: pxe_server_sync_from_proxy_now | bool
+  register: pxe_server_sync_result
+  changed_when: "'Fetched' in pxe_server_sync_result.stdout or 'Published' in pxe_server_sync_result.stdout"
 
 - name: Document PXE server workflow
   ansible.builtin.template:
