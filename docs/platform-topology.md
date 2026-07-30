@@ -17,6 +17,7 @@ This project uses four runtime nodes:
    - DHCP/TFTP/HTTP PXE services
    - client image build workspace
    - points upstream to the proxy node
+   - built and maintained by Ansible from this repository
 
 4. `pxe client node`
    - boots from network
@@ -24,3 +25,4 @@ This project uses four runtime nodes:
    - red disconnect banner and network test
    - read-only source media handling
    - writable destination media blocked until scans succeed
+   - build artifacts are generated on the PXE server via `playbooks/build-pxe-client-assets.yml`

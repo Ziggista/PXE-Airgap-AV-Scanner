@@ -5,8 +5,8 @@ WORKSPACE="{{ pxe_client_livebuild_root }}"
 PUBLISH="{{ pxe_client_publish_dir }}"
 
 mkdir -p "$PUBLISH"
-cp -f "$WORKSPACE/chroot/live/vmlinuz" "$PUBLISH/vmlinuz"
-cp -f "$WORKSPACE/chroot/live/initrd.img" "$PUBLISH/initrd"
+cp -f "$WORKSPACE/binary/live/vmlinuz" "$PUBLISH/vmlinuz"
+cp -f "$WORKSPACE/binary/live/initrd.img" "$PUBLISH/initrd"
 cp -f "$WORKSPACE/binary/live/filesystem.squashfs" "$PUBLISH/filesystem.squashfs"
 
 echo "Published PXE client assets into $PUBLISH"

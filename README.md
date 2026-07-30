@@ -8,7 +8,7 @@ Python scaffolding for a three-part offline media scanning workflow with a prima
 
 Windows can still be used as an optional acquisition workstation for vendor media that is not naturally distributed through APT, but Items 1, 2, and 3 should all run on Ubuntu.
 
-This repository is a starting point. It does not yet implement a full PXE stack, Ubuntu live image build, or NIC teardown logic. It gives you a clean Python structure, local tooling, and extension points to build those pieces properly.
+This repository now includes Ansible-managed control, proxy, and PXE server roles, plus a staged Ubuntu live-build workflow for the PXE client image. Physical PXE-client enforcement details such as post-boot NIC handling still need hardening and real hardware validation.
 
 ## Project layout
 
@@ -96,11 +96,13 @@ python .\tools\update_local_repo.py
 - Includes Ubuntu `systemd` unit templates for the VM-hosted services.
 - Includes a single Ansible repository with inventories, playbooks, and role skeletons for all three platform components.
 - Includes a control-node playbook path for the Ubuntu Ansible runner, including the `ziggi-py` automation user and guarded third-party repo handling.
+- Includes a PXE client image role that stages an autologin desktop, disconnect banner, read-only source media mounts, gated writable destination mounts, and offline scan helpers.
+- Includes a `build-pxe-client-assets.yml` playbook to sync ClamAV definitions from the proxy and publish PXE boot assets from the build VM.
 
 ## What still needs implementation
 
-- Full DHCP/TFTP/PXE boot flow.
-- Ubuntu live or custom RAM-disk image creation.
+- Final DHCP scope/interface tuning for the isolated PXE segment.
+- Full PXE boot validation against real firmware or a dedicated PXE test VM.
 - FAT/NTFS/exFAT validation inside the live environment.
 - Network adapter teardown after boot.
 - Robust hardware handling for USB destination media.

@@ -1,0 +1,8 @@
+---
+- name: Build and publish PXE client boot assets
+  hosts: pxe_client_image
+  become: true
+  vars:
+    pxe_client_build_now: true
+  roles:
+    - role: pxe_client_image

@@ -112,3 +112,39 @@
     owner: root
     group: root
     mode: "0644"
+
+- name: Build and publish PXE client assets
+  when: pxe_client_build_now | bool
+  block:
+    - name: Sync ClamAV definitions from proxy into live-build tree
+      ansible.builtin.command: "{{ pxe_client_output_dir }}/sync-clamav-from-proxy.sh"
+      register: pxe_client_sync_result
+      changed_when: "'Fetched' in pxe_client_sync_result.stdout"
+
+    - name: Build PXE client live image
+      ansible.builtin.command: "{{ pxe_client_output_dir }}/build-pxe-client-image.sh"
+      args:
+        chdir: "{{ pxe_client_livebuild_root }}"
+      register: pxe_client_build_result
+      changed_when: true
+
+    - name: Publish PXE client boot assets
+      ansible.builtin.command: "{{ pxe_client_output_dir }}/publish-pxe-client-assets.sh"
+      register: pxe_client_publish_result
+      changed_when: true
+
+    - name: Verify published PXE client assets exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ pxe_client_publish_dir }}/vmlinuz"
+        - "{{ pxe_client_publish_dir }}/initrd"
+        - "{{ pxe_client_publish_dir }}/filesystem.squashfs"
+      register: pxe_client_asset_stats
+
+    - name: Assert published PXE client assets are present
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+        fail_msg: "Expected published PXE asset is missing: {{ item.stat.path }}"
+      loop: "{{ pxe_client_asset_stats.results }}"

@@ -10,6 +10,7 @@ pxe_client_publish_dir: "{{ pxe_server_client_publish_dir }}"
 pxe_client_desktop_banner_color: "#a40000"
 pxe_client_network_test_target: "{{ pxe_server_proxy_host }}"
 pxe_client_network_test_port: 80
+pxe_client_build_now: false
 
 pxe_client_packages:
   - clamav

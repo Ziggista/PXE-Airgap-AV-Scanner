@@ -7,4 +7,4 @@ MENU TITLE AV PXE Boot Menu
 LABEL ubuntu-live
     MENU LABEL Ubuntu Live AV Client
     KERNEL images/{{ pxe_server_client_image_name }}/vmlinuz
-    APPEND initrd=images/{{ pxe_server_client_image_name }}/initrd boot=casper ip=dhcp fetch=http://{{ ansible_host }}/images/{{ pxe_server_client_image_name }}/filesystem.squashfs
+    APPEND initrd=images/{{ pxe_server_client_image_name }}/initrd boot=live components ip=dhcp fetch=http://{{ ansible_host }}/images/{{ pxe_server_client_image_name }}/filesystem.squashfs

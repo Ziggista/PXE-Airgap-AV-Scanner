@@ -17,15 +17,23 @@ This workspace prepares a PXE-booted Ubuntu live client that:
 
 ## Build sequence
 
-1. Sync ClamAV definitions from the proxy node:
+1. Render the PXE client workspace onto the build VM:
+
+   `ansible-playbook playbooks/pxe-client-image.yml`
+
+2. Build and publish the client assets in one Ansible-driven pass:
+
+   `ansible-playbook playbooks/build-pxe-client-assets.yml`
+
+3. If manual troubleshooting is needed, sync ClamAV definitions from the proxy node:
 
    `sudo {{ pxe_client_output_dir }}/sync-clamav-from-proxy.sh`
 
-2. Build the live image:
+4. Build the live image:
 
    `sudo {{ pxe_client_output_dir }}/build-pxe-client-image.sh`
 
-3. Publish PXE assets:
+5. Publish PXE assets:
 
    `sudo {{ pxe_client_output_dir }}/publish-pxe-client-assets.sh`
 
