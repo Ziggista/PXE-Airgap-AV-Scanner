@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+mkdir -p "{{ pxe_server_workspace }}/proxy-sync/clamav"
+mkdir -p "{{ pxe_server_workspace }}/proxy-sync/artifacts"
+
+curl -fsSL "{{ pxe_server_proxy_base_url }}/" >/dev/null
+for file in main.cvd daily.cvd bytecode.cvd main.cld daily.cld bytecode.cld; do
+  if curl -fsSL "{{ pxe_server_proxy_definitions_base_url }}/clamav/${file}" -o "{{ pxe_server_workspace }}/proxy-sync/clamav/${file}"; then
+    echo "Fetched ${file}"
+  fi
+done
+
+echo "Proxy definitions staged under {{ pxe_server_workspace }}/proxy-sync/clamav"

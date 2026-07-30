@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+WORKSPACE="{{ pxe_client_livebuild_root }}"
+OUTPUT="{{ pxe_client_output_dir }}"
+
+cd "$WORKSPACE"
+lb clean --purge || true
+
+lb config \
+  --architectures amd64 \
+  --binary-images netboot \
+  --debian-installer false \
+  --distribution "{{ ubuntu_codename }}" \
+  --archive-areas "main universe" \
+  --linux-flavours generic \
+  --bootappend-live "boot=casper components username={{ pxe_client_username }} hostname={{ pxe_client_hostname }}"
+
+lb build
+
+echo "Live image build completed under $WORKSPACE"
+echo "Publish with: sudo $OUTPUT/publish-pxe-client-assets.sh"

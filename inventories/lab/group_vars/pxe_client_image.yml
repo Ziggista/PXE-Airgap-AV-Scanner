@@ -1,13 +1,36 @@
 ---
-pxe_client_workspace: /srv/pxe-client-image
+pxe_client_workspace: "{{ pxe_server_workspace }}"
 pxe_client_live_root: "{{ pxe_client_workspace }}/rootfs"
 pxe_client_output_dir: "{{ pxe_client_workspace }}/output"
+pxe_client_livebuild_root: "{{ pxe_server_livebuild_root }}"
+pxe_client_username: scanner
+pxe_client_hostname: av-pxe-client
+pxe_client_proxy_definitions_base_url: "{{ pxe_server_proxy_definitions_base_url }}"
+pxe_client_publish_dir: "{{ pxe_server_client_publish_dir }}"
+pxe_client_desktop_banner_color: "#a40000"
+pxe_client_network_test_target: "{{ pxe_server_proxy_host }}"
+pxe_client_network_test_port: 80
 
 pxe_client_packages:
   - clamav
-  - yara
-  - exfat-fuse
+  - clamav-freshclam
+  - curl
   - exfatprogs
+  - firefox-esr
+  - gir1.2-gtk-3.0
+  - lightdm
+  - live-boot
+  - live-config
+  - network-manager
   - ntfs-3g
+  - openbox
+  - pcmanfm
+  - policykit-1
+  - python3
+  - python3-gi
   - dosfstools
   - rsync
+  - udisks2
+  - usbutils
+  - xorg
+  - yara

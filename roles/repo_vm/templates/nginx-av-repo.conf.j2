@@ -14,4 +14,9 @@ server {
         alias {{ artifact_root }}/;
         autoindex on;
     }
+
+    location /definitions/ {
+        alias {{ repo_vm_definitions_root }}/;
+        autoindex on;
+    }
 }

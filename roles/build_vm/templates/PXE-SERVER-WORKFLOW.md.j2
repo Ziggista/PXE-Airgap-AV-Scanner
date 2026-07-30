@@ -1,0 +1,35 @@
+# PXE Server Workflow
+
+This node is the PXE boot and image build server.
+
+## Upstream
+
+- Package and definition upstream node: `{{ pxe_server_proxy_host }}`
+- Proxy base URL: `{{ pxe_server_proxy_base_url }}`
+- Definitions base URL: `{{ pxe_server_proxy_definitions_base_url }}`
+
+## Main paths
+
+- PXE root: `{{ pxe_root }}`
+- TFTP root: `{{ tftp_root }}`
+- Client image workspace: `{{ pxe_server_workspace }}`
+- Live-build root: `{{ pxe_server_livebuild_root }}`
+- Published client image path: `{{ pxe_server_client_publish_dir }}`
+
+## Basic sequence
+
+1. Sync definitions and any staged artifacts from the proxy node:
+
+   `sudo /usr/local/sbin/sync-from-proxy.sh`
+
+2. Build or refresh the client image workspace:
+
+   `ansible-playbook playbooks/pxe-client-image.yml`
+
+3. Build the live image on this node:
+
+   `sudo {{ pxe_client_output_dir | default('/srv/pxe-client-image/output') }}/build-pxe-client-image.sh`
+
+4. Publish `vmlinuz`, `initrd`, and `filesystem.squashfs` into:
+
+   `{{ pxe_server_client_publish_dir }}`

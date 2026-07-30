@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+mkdir -p "{{ repo_vm_clamav_root }}"
+freshclam --config-file=/etc/clamav/freshclam-av-proxy.conf --stdout

@@ -1,10 +1,44 @@
 # PXE Client Image Notes
 
-This role prepares the packages and wrapper scripts needed for the Ubuntu live PXE client.
+This workspace prepares a PXE-booted Ubuntu live client that:
 
-Expected next steps:
+1. autologins to a minimal desktop session
+2. shows a red disconnect banner after the desktop loads
+3. allows testing that network access is gone
+4. mounts source USB media read-only
+5. runs offline AV scans before enabling destination media writes
+6. only allows writable destination mounting after scan approval
 
-1. Build or customize an Ubuntu live root filesystem.
-2. Add scanner binaries, signatures, and rules under `/opt/av`.
-3. Export `vmlinuz` and `initrd` into `{{ pxe_root | default('/srv/pxe') }}/images`.
-4. Add a post-boot network teardown step once signatures and policy content are loaded.
+## Main paths
+
+- Live-build root: `{{ pxe_client_livebuild_root }}`
+- Output helpers: `{{ pxe_client_output_dir }}`
+- Publish target: `{{ pxe_client_publish_dir }}`
+
+## Build sequence
+
+1. Sync ClamAV definitions from the proxy node:
+
+   `sudo {{ pxe_client_output_dir }}/sync-clamav-from-proxy.sh`
+
+2. Build the live image:
+
+   `sudo {{ pxe_client_output_dir }}/build-pxe-client-image.sh`
+
+3. Publish PXE assets:
+
+   `sudo {{ pxe_client_output_dir }}/publish-pxe-client-assets.sh`
+
+## Session behavior
+
+- Autologin user: `{{ pxe_client_username }}`
+- The login session launches `/usr/local/bin/av-network-banner.py`
+- Source media should be mounted with:
+
+  `sudo /usr/local/bin/mount-public-media.sh /dev/sdX1`
+
+- Offline scans should be run with:
+
+  `sudo /usr/local/bin/offline-scan.sh /mnt/public-media /mnt/approved-media`
+
+- Destination media remains blocked until scans create the approval marker.

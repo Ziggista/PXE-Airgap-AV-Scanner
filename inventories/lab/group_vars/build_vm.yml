@@ -3,12 +3,31 @@ pxe_root: /srv/pxe
 tftp_root: /srv/tftp
 nginx_site_name: av-build
 pxe_menu_file: "{{ tftp_root }}/pxelinux.cfg/default"
+pxe_server_workspace: /srv/pxe-client-image
+pxe_server_livebuild_root: "{{ pxe_server_workspace }}/live-build"
+pxe_server_proxy_host: "{{ hostvars['av-repo-vm'].ansible_host | default('av-repo-vm') }}"
+pxe_server_proxy_base_url: "http://{{ pxe_server_proxy_host }}"
+pxe_server_proxy_repo_base_url: "{{ pxe_server_proxy_base_url }}/ubuntu"
+pxe_server_proxy_definitions_base_url: "{{ pxe_server_proxy_base_url }}/definitions"
+pxe_server_proxy_artifacts_base_url: "{{ pxe_server_proxy_base_url }}/artifacts"
+pxe_server_client_image_name: av-client
+pxe_server_client_publish_dir: "{{ pxe_root }}/images/{{ pxe_server_client_image_name }}"
+pxe_server_interface: ""
+pxe_server_dhcp_range_start: 192.168.50.100
+pxe_server_dhcp_range_end: 192.168.50.200
+pxe_server_dhcp_lease: 12h
 
 build_vm_packages:
   - dnsmasq
+  - curl
+  - debootstrap
+  - live-build
   - nginx
+  - rsync
+  - squashfs-tools
   - syslinux-common
   - pxelinux
   - ipxe
   - tftpd-hpa
   - nfs-kernel-server
+  - xorriso

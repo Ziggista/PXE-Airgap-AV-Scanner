@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+import socket
+import gi
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gtk
+
+TARGET = "{{ pxe_client_network_test_target }}"
+PORT = {{ pxe_client_network_test_port }}
+
+
+def network_reachable():
+    try:
+        with socket.create_connection((TARGET, PORT), timeout=2):
+            return True
+    except OSError:
+        return False
+
+
+class Banner(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="Airgap AV Scanner")
+        self.set_default_size(900, 220)
+        self.set_keep_above(True)
+        self.set_resizable(False)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        box.set_border_width(18)
+
+        header = Gtk.Label()
+        header.set_markup(
+            "<span foreground='white' background='{{ pxe_client_desktop_banner_color }}' size='18000'><b>REMOVE THE NETWORK CONNECTION NOW</b></span>"
+        )
+
+        text = Gtk.Label(
+            label="This client is intended to scan public media offline. Disconnect network access before handling media, then use the test button below."
+        )
+        text.set_line_wrap(True)
+
+        self.status = Gtk.Label(label="Network test has not been run yet.")
+
+        button = Gtk.Button(label="Test Network Disconnected")
+        button.connect("clicked", self.on_test)
+
+        box.pack_start(header, False, False, 0)
+        box.pack_start(text, False, False, 0)
+        box.pack_start(self.status, False, False, 0)
+        box.pack_start(button, False, False, 0)
+
+        self.add(box)
+
+    def on_test(self, _button):
+        if network_reachable():
+            self.status.set_markup("<span foreground='red'><b>Network is still reachable. Disconnect it before scanning.</b></span>")
+        else:
+            self.status.set_markup("<span foreground='green'><b>Network test passed. Continue with offline scanning only.</b></span>")
+
+
+win = Banner()
+win.connect("destroy", Gtk.main_quit)
+win.show_all()
+Gtk.main()

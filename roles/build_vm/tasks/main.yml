@@ -17,6 +17,9 @@
     - "{{ tftp_root }}/pxelinux.cfg"
     - "{{ pxe_root }}/images"
     - "{{ pxe_root }}/artifacts"
+    - "{{ pxe_server_workspace }}"
+    - "{{ pxe_server_livebuild_root }}"
+    - "{{ pxe_server_client_publish_dir }}"
 
 - name: Render dnsmasq configuration
   ansible.builtin.template:
@@ -66,3 +69,19 @@
     - dnsmasq
     - nginx
     - tftpd-hpa
+
+- name: Render PXE server upstream sync helper
+  ansible.builtin.template:
+    src: sync-from-proxy.sh.j2
+    dest: /usr/local/sbin/sync-from-proxy.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Document PXE server workflow
+  ansible.builtin.template:
+    src: PXE-SERVER-WORKFLOW.md.j2
+    dest: "{{ pxe_server_workspace }}/PXE-SERVER-WORKFLOW.md"
+    owner: root
+    group: root
+    mode: "0644"

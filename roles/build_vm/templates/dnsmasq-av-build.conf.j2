@@ -3,7 +3,10 @@ log-dhcp
 enable-tftp
 tftp-root={{ tftp_root }}
 dhcp-boot=pxelinux.0
-
-# Replace the range and interface values for the actual PXE network.
-# dhcp-range=192.168.50.100,192.168.50.200,12h
-# interface=eth1
+dhcp-range={{ pxe_server_dhcp_range_start }},{{ pxe_server_dhcp_range_end }},{{ pxe_server_dhcp_lease }}
+{% if pxe_server_interface %}
+interface={{ pxe_server_interface }}
+bind-interfaces
+{% else %}
+# Set pxe_server_interface in inventory before using this node for real PXE DHCP service.
+{% endif %}

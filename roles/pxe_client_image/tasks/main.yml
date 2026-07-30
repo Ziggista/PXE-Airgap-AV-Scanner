@@ -15,11 +15,92 @@
     - "{{ pxe_client_workspace }}"
     - "{{ pxe_client_live_root }}"
     - "{{ pxe_client_output_dir }}"
+    - "{{ pxe_client_livebuild_root }}"
+    - "{{ pxe_client_livebuild_root }}/config"
+    - "{{ pxe_client_livebuild_root }}/config/includes.chroot"
+    - "{{ pxe_client_livebuild_root }}/config/includes.chroot/etc/lightdm/lightdm.conf.d"
+    - "{{ pxe_client_livebuild_root }}/config/includes.chroot/etc/xdg/autostart"
+    - "{{ pxe_client_livebuild_root }}/config/includes.chroot/usr/local/bin"
+    - "{{ pxe_client_livebuild_root }}/config/includes.chroot/opt/av/definitions/clamav"
+    - "{{ pxe_client_livebuild_root }}/config/package-lists"
+    - "{{ pxe_client_livebuild_root }}/config/hooks/live"
+
+- name: Render PXE client package list
+  ansible.builtin.template:
+    src: av-client.list.chroot.j2
+    dest: "{{ pxe_client_livebuild_root }}/config/package-lists/av-client.list.chroot"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render PXE client lightdm autologin config
+  ansible.builtin.template:
+    src: 20-av-client-autologin.conf.j2
+    dest: "{{ pxe_client_livebuild_root }}/config/includes.chroot/etc/lightdm/lightdm.conf.d/20-av-client-autologin.conf"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render PXE client desktop autostart entry
+  ansible.builtin.template:
+    src: av-network-banner.desktop.j2
+    dest: "{{ pxe_client_livebuild_root }}/config/includes.chroot/etc/xdg/autostart/av-network-banner.desktop"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render PXE client network warning app
+  ansible.builtin.template:
+    src: av-network-banner.py.j2
+    dest: "{{ pxe_client_livebuild_root }}/config/includes.chroot/usr/local/bin/av-network-banner.py"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render PXE client source media mount helper
+  ansible.builtin.template:
+    src: mount-public-media.sh.j2
+    dest: "{{ pxe_client_livebuild_root }}/config/includes.chroot/usr/local/bin/mount-public-media.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render PXE client destination media mount helper
+  ansible.builtin.template:
+    src: mount-approved-media.sh.j2
+    dest: "{{ pxe_client_livebuild_root }}/config/includes.chroot/usr/local/bin/mount-approved-media.sh"
+    owner: root
+    group: root
+    mode: "0755"
 
 - name: Render offline scan wrapper
   ansible.builtin.template:
     src: offline-scan.sh.j2
-    dest: "{{ pxe_client_output_dir }}/offline-scan.sh"
+    dest: "{{ pxe_client_livebuild_root }}/config/includes.chroot/usr/local/bin/offline-scan.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render live-build config helper
+  ansible.builtin.template:
+    src: build-pxe-client-image.sh.j2
+    dest: "{{ pxe_client_output_dir }}/build-pxe-client-image.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render publish helper
+  ansible.builtin.template:
+    src: publish-pxe-client-assets.sh.j2
+    dest: "{{ pxe_client_output_dir }}/publish-pxe-client-assets.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render ClamAV definition sync helper
+  ansible.builtin.template:
+    src: sync-clamav-from-proxy.sh.j2
+    dest: "{{ pxe_client_output_dir }}/sync-clamav-from-proxy.sh"
     owner: root
     group: root
     mode: "0755"

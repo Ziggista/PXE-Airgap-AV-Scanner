@@ -1,0 +1,26 @@
+# Approved Upstreams
+
+This proxy node is the only internet-facing package and definition acquisition node in the platform.
+
+## Default approved upstreams
+
+{% for upstream in repo_vm_approved_upstreams %}
+- `{{ upstream.name }}`: `{{ upstream.url }}`
+  Purpose: {{ upstream.purpose }}
+{% endfor %}
+
+## Policy
+
+- Official Ubuntu archives and security repositories are approved by default.
+- The ClamAV signature database mirror is approved by default.
+- Any additional upstreams require explicit review and approval before being added to `repo_vm_extra_upstreams`.
+
+## Third-party upstreams currently configured
+
+{% if repo_vm_extra_upstreams | length == 0 %}
+- None
+{% else %}
+{% for upstream in repo_vm_extra_upstreams %}
+- `{{ upstream.name }}`: `{{ upstream.url }}`
+{% endfor %}
+{% endif %}

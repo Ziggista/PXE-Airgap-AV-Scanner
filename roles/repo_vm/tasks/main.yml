@@ -1,4 +1,13 @@
 ---
+- name: Assert third-party upstreams are explicitly approved
+  ansible.builtin.assert:
+    that:
+      - repo_vm_allow_third_party_upstreams or (repo_vm_extra_upstreams | length == 0)
+    fail_msg: >-
+      repo_vm_extra_upstreams is non-empty but repo_vm_allow_third_party_upstreams
+      is false. Review and explicit approval are required before adding non-Ubuntu
+      or non-default upstream feeds.
+
 - name: Install repository VM packages
   ansible.builtin.apt:
     name: "{{ repo_vm_packages }}"
@@ -17,6 +26,8 @@
     - "{{ artifact_root }}"
     - "{{ repo_root }}"
     - "{{ repo_root }}/docs"
+    - "{{ repo_vm_definitions_root }}"
+    - "{{ repo_vm_clamav_root }}"
 
 - name: Render aptly configuration
   ansible.builtin.template:
@@ -61,3 +72,36 @@
     owner: root
     group: root
     mode: "0644"
+
+- name: Document approved upstreams
+  ansible.builtin.template:
+    src: APPROVED-UPSTREAMS.md.j2
+    dest: "{{ repo_root }}/docs/approved-upstreams.md"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render freshclam mirror sync config
+  ansible.builtin.template:
+    src: freshclam-av-proxy.conf.j2
+    dest: /etc/clamav/freshclam-av-proxy.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render ClamAV definition sync helper
+  ansible.builtin.template:
+    src: sync-clamav-definitions.sh.j2
+    dest: /usr/local/sbin/sync-clamav-definitions.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Refresh ClamAV definitions on proxy node
+  ansible.builtin.command: /usr/local/sbin/sync-clamav-definitions.sh
+  register: clamav_sync_result
+  changed_when: >
+    'updated' in (clamav_sync_result.stdout | lower) or
+    'downloaded' in (clamav_sync_result.stdout | lower) or
+    'updated' in (clamav_sync_result.stderr | lower) or
+    'downloaded' in (clamav_sync_result.stderr | lower)

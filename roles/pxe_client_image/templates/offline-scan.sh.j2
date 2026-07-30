@@ -3,9 +3,17 @@ set -euo pipefail
 
 SOURCE_PATH="${1:-/mnt/source-media}"
 DESTINATION_PATH="${2:-/mnt/clean-output}"
+APPROVAL_DIR="/run/av-scan"
+CLAM_DB="/opt/av/definitions/clamav"
 
 mkdir -p "$DESTINATION_PATH"
+mkdir -p "$APPROVAL_DIR"
+rm -f "$APPROVAL_DIR/approved"
 
-clamscan --recursive --infected --no-summary "$SOURCE_PATH"
-yara --recursive /opt/av/rules/offline_rules.yar "$SOURCE_PATH"
+clamscan --recursive --infected --no-summary --database "$CLAM_DB" "$SOURCE_PATH"
+if [[ -f /opt/av/rules/offline_rules.yar ]]; then
+  yara --recursive /opt/av/rules/offline_rules.yar "$SOURCE_PATH"
+fi
+
+touch "$APPROVAL_DIR/approved"
 rsync -a --delete "$SOURCE_PATH"/ "$DESTINATION_PATH"/

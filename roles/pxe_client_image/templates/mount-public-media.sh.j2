@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DEVICE="${1:?usage: mount-public-media.sh /dev/sdX1}"
+TARGET="/mnt/public-media"
+
+mkdir -p "$TARGET"
+mount -o ro,nosuid,nodev "$DEVICE" "$TARGET"
+echo "Mounted $DEVICE read-only at $TARGET"

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DEVICE="${1:?usage: mount-approved-media.sh /dev/sdY1}"
+TARGET="${2:-/mnt/approved-media}"
+APPROVAL="/run/av-scan/approved"
+
+if [[ ! -f "$APPROVAL" ]]; then
+  echo "Writable destination media is blocked until offline scans complete successfully." >&2
+  exit 1
+fi
+
+mkdir -p "$TARGET"
+mount -o rw,nosuid,nodev "$DEVICE" "$TARGET"
+echo "Mounted $DEVICE read-write at $TARGET"
