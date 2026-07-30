@@ -15,6 +15,8 @@
     - "{{ aptly_root_dir }}"
     - "{{ aptly_public_dir }}"
     - "{{ artifact_root }}"
+    - "{{ repo_root }}"
+    - "{{ repo_root }}/docs"
 
 - name: Render aptly configuration
   ansible.builtin.template:
@@ -55,7 +57,7 @@
 - name: Document mirror commands
   ansible.builtin.template:
     src: MIRRORING.md.j2
-    dest: "{{ project_root }}/docs/repo-vm-mirroring.md"
+    dest: "{{ repo_root }}/docs/repo-vm-mirroring.md"
     owner: root
     group: root
     mode: "0644"
