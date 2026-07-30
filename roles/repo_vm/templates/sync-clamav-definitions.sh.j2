@@ -2,4 +2,5 @@
 set -euo pipefail
 
 mkdir -p "{{ repo_vm_clamav_root }}"
-freshclam --stdout --user=clamav --datadir="{{ repo_vm_clamav_root }}" --checks=12
+freshclam --stdout
+find /var/lib/clamav -maxdepth 1 -type f \( -name '*.cvd' -o -name '*.cld' -o -name '*.cud' -o -name '*.dat' \) -exec cp -f {} "{{ repo_vm_clamav_root }}/" \;
