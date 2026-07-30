@@ -77,7 +77,7 @@
 
 - name: Enable PXE client runtime definition sync service
   ansible.builtin.file:
-    src: /etc/systemd/system/av-definition-sync.service
+    src: ../av-definition-sync.service
     dest: "{{ pxe_client_livebuild_root }}/config/includes.chroot/etc/systemd/system/multi-user.target.wants/av-definition-sync.service"
     state: link
 
