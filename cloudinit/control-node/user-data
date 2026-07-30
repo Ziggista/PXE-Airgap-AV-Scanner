@@ -12,6 +12,14 @@ users:
     lock_passwd: false
     sudo: ALL=(ALL) NOPASSWD:ALL
     plain_text_passwd: "REPLACE_WITH_LOCAL_SEEDED_PASSWORD"
+  - name: ziggi-py
+    gecos: Ziggi Python Automation
+    groups: adm, sudo
+    shell: /bin/bash
+    lock_passwd: true
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOmjwNUVLGQIWdKeWAtIo1Kzv2WIx7r97Xz+2lmE2xEl ziggi-py-control-host
 chpasswd:
   expire: false
 packages:
@@ -21,6 +29,7 @@ packages:
   - qemu-guest-agent
   - rsync
   - curl
+  - openssh-server
 runcmd:
   - systemctl enable --now qemu-guest-agent
   - systemctl enable --now ssh

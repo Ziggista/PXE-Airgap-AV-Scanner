@@ -1,0 +1,54 @@
+---
+- name: Assert third-party repos are explicitly approved
+  ansible.builtin.assert:
+    that:
+      - control_node_allow_third_party_repos or (control_node_extra_apt_repositories | length == 0)
+    fail_msg: >-
+      control_node_extra_apt_repositories is non-empty but
+      control_node_allow_third_party_repos is false. Review and approval are
+      required before adding non-Ubuntu repositories.
+
+- name: Install control node packages
+  ansible.builtin.apt:
+    name: "{{ control_node_packages }}"
+    state: present
+
+- name: Configure optional third-party apt repositories
+  ansible.builtin.apt_repository:
+    repo: "{{ item.repo }}"
+    filename: "{{ item.filename | default(omit) }}"
+    state: present
+    update_cache: true
+  loop: "{{ control_node_extra_apt_repositories }}"
+
+- name: Ensure ziggi-py user exists
+  ansible.builtin.user:
+    name: ziggi-py
+    comment: Ziggi Python Automation
+    shell: /bin/bash
+    groups: sudo,adm
+    append: true
+    create_home: true
+
+- name: Ensure ziggi-py SSH directory exists
+  ansible.builtin.file:
+    path: /home/ziggi-py/.ssh
+    state: directory
+    owner: ziggi-py
+    group: ziggi-py
+    mode: "0700"
+
+- name: Install ziggi-py authorized keys
+  ansible.posix.authorized_key:
+    user: ziggi-py
+    key: "{{ item }}"
+    state: present
+  loop: "{{ control_node_ziggi_py_public_keys }}"
+
+- name: Allow ziggi-py passwordless sudo
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/90-ziggi-py
+    content: "ziggi-py ALL=(ALL) NOPASSWD:ALL\n"
+    owner: root
+    group: root
+    mode: "0440"

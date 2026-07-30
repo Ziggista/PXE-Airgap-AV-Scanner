@@ -1,0 +1,7 @@
+---
+- name: Configure Ansible control node
+  hosts: control_node
+  become: true
+  roles:
+    - common
+    - control_node

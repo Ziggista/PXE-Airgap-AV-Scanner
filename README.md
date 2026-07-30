@@ -21,6 +21,8 @@ This repository is a starting point. It does not yet implement a full PXE stack,
   - `client_workflow.py`: offline scan orchestration entrypoint.
 - `tools/`
   - `acquire_media.py`
+  - `bootstrap_local_machine.py`
+  - `update_local_repo.py`
   - `start_proxy.py`
   - `start_build_server.py`
   - `run_scan_workflow.py`
@@ -76,6 +78,13 @@ Acquire and stage non-APT media from a workstation if needed:
 python ./tools/acquire_media.py --config ./configs/media-acquisition.sample.json
 ```
 
+Bootstrap or re-sync the local Windows checkout from GitHub:
+
+```powershell
+python .\tools\bootstrap_local_machine.py
+python .\tools\update_local_repo.py
+```
+
 ## What this scaffold already does
 
 - Supports an optional workstation acquisition/staging point for scanner binaries and boot media.
@@ -86,6 +95,7 @@ python ./tools/acquire_media.py --config ./configs/media-acquisition.sample.json
 - Produces JSON scan reports and only copies files onward if all engines pass.
 - Includes Ubuntu `systemd` unit templates for the VM-hosted services.
 - Includes a single Ansible repository with inventories, playbooks, and role skeletons for all three platform components.
+- Includes a control-node playbook path for the Ubuntu Ansible runner, including the `ziggi-py` automation user and guarded third-party repo handling.
 
 ## What still needs implementation
 

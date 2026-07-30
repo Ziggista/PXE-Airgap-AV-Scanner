@@ -1,0 +1,22 @@
+---
+ansible_user: ziggi-py
+ansible_become: true
+
+control_node_packages:
+  - ansible-core
+  - ca-certificates
+  - curl
+  - git
+  - gnupg
+  - jq
+  - openssh-server
+  - python3
+  - python3-apt
+  - python3-venv
+  - rsync
+
+control_node_ziggi_py_public_keys:
+  - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOmjwNUVLGQIWdKeWAtIo1Kzv2WIx7r97Xz+2lmE2xEl ziggi-py-control-host
+
+control_node_allow_third_party_repos: false
+control_node_extra_apt_repositories: []
