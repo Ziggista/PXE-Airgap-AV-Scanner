@@ -3,6 +3,7 @@ set -euo pipefail
 
 WORKSPACE="{{ pxe_client_livebuild_root }}"
 OUTPUT="{{ pxe_client_output_dir }}"
+CASPER_DIR="$WORKSPACE/binary/casper"
 
 cd "$WORKSPACE"
 lb clean --purge || true
@@ -20,7 +21,14 @@ lb config \
   --syslinux-theme live-build \
   --bootappend-live "boot=casper components username={{ pxe_client_username }} hostname={{ pxe_client_hostname }}"
 
-lb build
+if ! lb build; then
+  if [[ -f "$CASPER_DIR/filesystem.squashfs" ]] && compgen -G "$CASPER_DIR/vmlinuz-*" > /dev/null && compgen -G "$CASPER_DIR/initrd.img-*" > /dev/null; then
+    echo "lb build exited non-zero after generating the PXE client payload."
+    echo "Continuing because kernel, initrd, and squashfs are present and PXE bootloader packaging is managed separately."
+  else
+    exit 1
+  fi
+fi
 
 echo "Live image build completed under $WORKSPACE"
 echo "Publish with: sudo $OUTPUT/publish-pxe-client-assets.sh"
