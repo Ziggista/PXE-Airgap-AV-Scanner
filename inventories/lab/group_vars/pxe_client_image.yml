@@ -16,7 +16,6 @@ pxe_client_packages:
   - clamav-freshclam
   - curl
   - exfatprogs
-  - firefox-esr
   - gir1.2-gtk-3.0
   - lightdm
   - live-boot
