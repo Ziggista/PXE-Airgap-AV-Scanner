@@ -1,0 +1,13 @@
+---
+pxe_client_workspace: /srv/pxe-client-image
+pxe_client_live_root: "{{ pxe_client_workspace }}/rootfs"
+pxe_client_output_dir: "{{ pxe_client_workspace }}/output"
+
+pxe_client_packages:
+  - clamav
+  - yara
+  - exfat-fuse
+  - exfatprogs
+  - ntfs-3g
+  - dosfstools
+  - rsync

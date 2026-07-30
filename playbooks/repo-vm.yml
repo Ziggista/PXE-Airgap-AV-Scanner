@@ -1,0 +1,7 @@
+---
+- name: Configure repository VM
+  hosts: repo_vm
+  become: true
+  roles:
+    - common
+    - repo_vm

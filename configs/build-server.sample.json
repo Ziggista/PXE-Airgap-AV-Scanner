@@ -1,0 +1,8 @@
+{
+  "host": "127.0.0.1",
+  "port": 8090,
+  "proxy_base_url": "http://127.0.0.1:8080",
+  "manifest_file": "./runtime/manifests/boot.json",
+  "stage_dir": "./runtime/staged",
+  "log_file": "./runtime/logs/build-server.log"
+}

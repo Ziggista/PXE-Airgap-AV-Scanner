@@ -1,0 +1,20 @@
+{
+  "download_dir": "./runtime/downloads",
+  "publish_dir": "./runtime/published",
+  "manifest_path": "./runtime/manifests/acquired-media.json",
+  "log_file": "./runtime/logs/media-acquisition.log",
+  "items": [
+    {
+      "name": "Sysinternals Suite",
+      "type": "download",
+      "url": "https://download.sysinternals.com/files/SysinternalsSuite.zip",
+      "filename": "SysinternalsSuite.zip"
+    },
+    {
+      "name": "Local WinPE Artifact",
+      "type": "copy",
+      "source": "C:\\Temp\\winpe.wim",
+      "filename": "winpe.wim"
+    }
+  ]
+}

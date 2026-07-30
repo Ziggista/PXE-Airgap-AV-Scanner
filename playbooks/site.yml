@@ -1,0 +1,4 @@
+---
+- import_playbook: repo-vm.yml
+- import_playbook: build-vm.yml
+- import_playbook: pxe-client-image.yml

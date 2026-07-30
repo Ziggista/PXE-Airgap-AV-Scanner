@@ -1,0 +1,21 @@
+---
+aptly_root_dir: /srv/aptly
+aptly_publish_endpoint: filesystem:public:
+aptly_public_dir: /srv/aptly/public
+aptly_mirrors:
+  - name: "ubuntu-{{ ubuntu_release }}-main"
+    archive_url: http://archive.ubuntu.com/ubuntu
+    distribution: "{{ ubuntu_codename }}"
+    components: [main, universe]
+  - name: "ubuntu-{{ ubuntu_release }}-updates"
+    archive_url: http://archive.ubuntu.com/ubuntu
+    distribution: "{{ ubuntu_codename }}-updates"
+    components: [main, universe]
+  - name: "ubuntu-{{ ubuntu_release }}-security"
+    archive_url: http://security.ubuntu.com/ubuntu
+    distribution: "{{ ubuntu_codename }}-security"
+    components: [main, universe]
+
+repo_vm_packages:
+  - aptly
+  - nginx

@@ -1,0 +1,28 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  timezone: Australia/Brisbane
+  updates: security
+  ssh:
+    install-server: true
+    allow-pw: true
+  identity:
+    hostname: av-control-node
+    username: ubuntu
+    password: "$6$exDY1mhS4KUYCE/2$zmn9ToZwTKLhCw.b4/b.ZRTIZM30JZ4QrOQ2aOXJ8yk96xpcCof0kxKwuX1kqLG/ygbJ1f8wxED22bTL4F46P0"
+  packages:
+    - ansible-core
+    - git
+    - python3-venv
+    - qemu-guest-agent
+    - rsync
+    - curl
+  storage:
+    layout:
+      name: direct
+  late-commands:
+    - curtin in-target --target=/target -- systemctl enable ssh
+    - curtin in-target --target=/target -- systemctl enable qemu-guest-agent

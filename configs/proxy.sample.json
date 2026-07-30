@@ -1,0 +1,12 @@
+{
+  "host": "127.0.0.1",
+  "port": 8080,
+  "timeout_seconds": 120,
+  "allowed_hosts": [
+    "download.sysinternals.com",
+    "live.sysinternals.com",
+    "go.microsoft.com"
+  ],
+  "cache_dir": "./runtime/proxy-cache",
+  "log_file": "./runtime/logs/proxy-server.log"
+}

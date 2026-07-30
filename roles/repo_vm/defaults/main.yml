@@ -1,0 +1,2 @@
+---
+aptly_snapshot_name: "ubuntu-{{ ubuntu_release }}-baseline-{{ ansible_date_time.date | replace('-', '') }}"

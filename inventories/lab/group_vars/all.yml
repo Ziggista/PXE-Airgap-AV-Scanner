@@ -1,0 +1,25 @@
+---
+ansible_user: ubuntu
+ansible_become: true
+
+project_root: /opt/av-pxe-tooling
+repo_root: /srv/av-pxe
+ubuntu_release: "26.04"
+ubuntu_codename: resolute
+ubuntu_architecture: amd64
+
+artifact_root: "{{ repo_root }}/artifacts"
+apt_repo_public_base_url: "http://av-repo-vm/ubuntu"
+
+repo_gpg_key_name: "AV PXE Repo Signing Key"
+repo_gpg_key_email: "av-pxe@example.local"
+
+common_packages:
+  - ca-certificates
+  - curl
+  - git
+  - gnupg
+  - jq
+  - python3
+  - python3-apt
+  - python3-venv

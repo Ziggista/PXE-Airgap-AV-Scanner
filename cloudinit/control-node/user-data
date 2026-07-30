@@ -1,0 +1,26 @@
+#cloud-config
+hostname: av-control-node
+manage_etc_hosts: true
+package_update: true
+package_upgrade: true
+ssh_pwauth: true
+users:
+  - name: ziggi-ubuntu
+    gecos: Ziggi Ubuntu
+    groups: adm, sudo
+    shell: /bin/bash
+    lock_passwd: false
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    plain_text_passwd: "MUtgVFGpiIvjPZ!$"
+chpasswd:
+  expire: false
+packages:
+  - ansible-core
+  - git
+  - python3-venv
+  - qemu-guest-agent
+  - rsync
+  - curl
+runcmd:
+  - systemctl enable --now qemu-guest-agent
+  - systemctl enable --now ssh

@@ -1,0 +1,14 @@
+[Unit]
+Description=AV PXE Build Server
+After=network-online.target av-proxy.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/av-pxe-tooling
+ExecStart=/usr/bin/python3 /opt/av-pxe-tooling/tools/start_build_server.py --config /etc/av-pxe/build.json
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

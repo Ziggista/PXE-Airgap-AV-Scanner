@@ -1,0 +1,10 @@
+{
+  "download_dir": "./runtime/downloads",
+  "output_dir": "./runtime/cloud-images",
+  "manifest_path": "./runtime/manifests/cloud-image-ubuntu-26.04.json",
+  "log_file": "./runtime/logs/cloud-image.log",
+  "image_url": "https://cloud-images.ubuntu.com/releases/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img",
+  "sha256sums_url": "https://cloud-images.ubuntu.com/releases/releases/26.04/release/SHA256SUMS",
+  "image_filename": "ubuntu-26.04-server-cloudimg-amd64.img",
+  "output_vhd_filename": "ubuntu-26.04-server-cloudimg-amd64-fixed.vhd"
+}

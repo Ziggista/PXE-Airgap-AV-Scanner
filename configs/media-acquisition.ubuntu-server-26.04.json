@@ -1,0 +1,26 @@
+{
+  "download_dir": "./runtime/downloads",
+  "publish_dir": "./runtime/published",
+  "manifest_path": "./runtime/manifests/ubuntu-server-26.04-acquired-media.json",
+  "log_file": "./runtime/logs/media-acquisition.log",
+  "items": [
+    {
+      "name": "Ubuntu Server 26.04 LTS ISO",
+      "type": "download",
+      "url": "https://releases.ubuntu.com/releases/resolute/ubuntu-26.04-live-server-amd64.iso",
+      "filename": "ubuntu-26.04-live-server-amd64.iso"
+    },
+    {
+      "name": "Ubuntu Server 26.04 SHA256SUMS",
+      "type": "download",
+      "url": "https://releases.ubuntu.com/releases/resolute/SHA256SUMS",
+      "filename": "ubuntu-26.04-SHA256SUMS.txt"
+    },
+    {
+      "name": "Ubuntu Server 26.04 SHA256SUMS GPG",
+      "type": "download",
+      "url": "https://releases.ubuntu.com/releases/resolute/SHA256SUMS.gpg",
+      "filename": "ubuntu-26.04-SHA256SUMS.gpg"
+    }
+  ]
+}

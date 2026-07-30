@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "av-pxe-tooling"
+version = "0.1.0"
+description = "Windows Python tooling for proxy, PXE build, and offline AV scan workflows."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "OpenAI Codex" }]
+dependencies = []
+
+[tool.setuptools]
+packages = ["avtooling"]

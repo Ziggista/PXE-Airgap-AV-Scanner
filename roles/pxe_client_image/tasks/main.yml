@@ -1,0 +1,33 @@
+---
+- name: Install PXE client image packages
+  ansible.builtin.apt:
+    name: "{{ pxe_client_packages }}"
+    state: present
+
+- name: Ensure PXE client workspace exists
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ pxe_client_workspace }}"
+    - "{{ pxe_client_live_root }}"
+    - "{{ pxe_client_output_dir }}"
+
+- name: Render offline scan wrapper
+  ansible.builtin.template:
+    src: offline-scan.sh.j2
+    dest: "{{ pxe_client_output_dir }}/offline-scan.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render PXE client build notes
+  ansible.builtin.template:
+    src: BUILDING.md.j2
+    dest: "{{ pxe_client_output_dir }}/BUILDING.md"
+    owner: root
+    group: root
+    mode: "0644"

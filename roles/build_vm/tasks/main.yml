@@ -1,0 +1,68 @@
+---
+- name: Install PXE build packages
+  ansible.builtin.apt:
+    name: "{{ build_vm_packages }}"
+    state: present
+
+- name: Ensure PXE directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ pxe_root }}"
+    - "{{ tftp_root }}"
+    - "{{ tftp_root }}/pxelinux.cfg"
+    - "{{ pxe_root }}/images"
+    - "{{ pxe_root }}/artifacts"
+
+- name: Render dnsmasq configuration
+  ansible.builtin.template:
+    src: dnsmasq-av-build.conf.j2
+    dest: /etc/dnsmasq.d/av-build.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart dnsmasq
+
+- name: Render PXE menu
+  ansible.builtin.template:
+    src: pxelinux-default.j2
+    dest: "{{ pxe_menu_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render nginx site for PXE artifacts
+  ansible.builtin.template:
+    src: nginx-av-build.conf.j2
+    dest: /etc/nginx/sites-available/{{ nginx_site_name }}.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload nginx
+
+- name: Enable nginx build site
+  ansible.builtin.file:
+    src: "/etc/nginx/sites-available/{{ nginx_site_name }}.conf"
+    dest: "/etc/nginx/sites-enabled/{{ nginx_site_name }}.conf"
+    state: link
+  notify: Reload nginx
+
+- name: Disable default nginx site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Reload nginx
+
+- name: Ensure build services are enabled and running
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop:
+    - dnsmasq
+    - nginx
+    - tftpd-hpa

@@ -1,0 +1,14 @@
+---
+pxe_root: /srv/pxe
+tftp_root: /srv/tftp
+nginx_site_name: av-build
+pxe_menu_file: "{{ tftp_root }}/pxelinux.cfg/default"
+
+build_vm_packages:
+  - dnsmasq
+  - nginx
+  - syslinux-common
+  - pxelinux
+  - ipxe
+  - tftpd-hpa
+  - nfs-kernel-server

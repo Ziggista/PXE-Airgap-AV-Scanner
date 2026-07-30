@@ -1,0 +1,61 @@
+---
+- name: Install repository VM packages
+  ansible.builtin.apt:
+    name: "{{ repo_vm_packages }}"
+    state: present
+
+- name: Ensure repository directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ aptly_root_dir }}"
+    - "{{ aptly_public_dir }}"
+    - "{{ artifact_root }}"
+
+- name: Render aptly configuration
+  ansible.builtin.template:
+    src: aptly.conf.j2
+    dest: /etc/aptly.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render nginx site for published repositories
+  ansible.builtin.template:
+    src: nginx-av-repo.conf.j2
+    dest: /etc/nginx/sites-available/av-repo.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload nginx
+
+- name: Enable nginx repo site
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/av-repo.conf
+    dest: /etc/nginx/sites-enabled/av-repo.conf
+    state: link
+  notify: Reload nginx
+
+- name: Disable default nginx site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Reload nginx
+
+- name: Ensure nginx is enabled and running
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true
+
+- name: Document mirror commands
+  ansible.builtin.template:
+    src: MIRRORING.md.j2
+    dest: "{{ project_root }}/docs/repo-vm-mirroring.md"
+    owner: root
+    group: root
+    mode: "0644"

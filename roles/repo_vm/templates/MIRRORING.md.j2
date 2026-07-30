@@ -1,0 +1,12 @@
+# Repo VM Mirroring
+
+Use the following sequence on the repo VM:
+
+```bash
+aptly mirror create {{ aptly_mirrors[0].name }} {{ aptly_mirrors[0].archive_url }} {{ aptly_mirrors[0].distribution }} {{ aptly_mirrors[0].components | join(' ') }}
+aptly mirror update {{ aptly_mirrors[0].name }}
+aptly snapshot create {{ aptly_snapshot_name }} from mirror {{ aptly_mirrors[0].name }}
+aptly publish snapshot -distribution={{ ubuntu_codename }} {{ aptly_snapshot_name }} {{ aptly_publish_endpoint }}
+```
+
+Repeat for each approved mirror defined in inventory.

@@ -1,0 +1,7 @@
+---
+- name: Configure PXE build VM
+  hosts: build_vm
+  become: true
+  roles:
+    - common
+    - build_vm

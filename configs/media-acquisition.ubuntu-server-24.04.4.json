@@ -1,0 +1,26 @@
+{
+  "download_dir": "./runtime/downloads",
+  "publish_dir": "D:\\AV\\published",
+  "manifest_path": "./runtime/manifests/ubuntu-server-24.04.4-acquired-media.json",
+  "log_file": "./runtime/logs/media-acquisition.log",
+  "items": [
+    {
+      "name": "Ubuntu Server 24.04.4 LTS ISO",
+      "type": "download",
+      "url": "https://releases.ubuntu.com/releases/24.04.4/ubuntu-24.04.4-live-server-amd64.iso",
+      "filename": "ubuntu-24.04.4-live-server-amd64.iso"
+    },
+    {
+      "name": "Ubuntu Server 24.04.4 SHA256SUMS",
+      "type": "download",
+      "url": "https://releases.ubuntu.com/releases/24.04.4/SHA256SUMS",
+      "filename": "ubuntu-24.04.4-SHA256SUMS.txt"
+    },
+    {
+      "name": "Ubuntu Server 24.04.4 SHA256SUMS GPG",
+      "type": "download",
+      "url": "https://releases.ubuntu.com/releases/24.04.4/SHA256SUMS.gpg",
+      "filename": "ubuntu-24.04.4-SHA256SUMS.gpg"
+    }
+  ]
+}

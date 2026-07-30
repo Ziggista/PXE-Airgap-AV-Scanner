@@ -1,0 +1,17 @@
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+
+    root {{ aptly_public_dir }};
+    autoindex on;
+
+    location /ubuntu/ {
+        alias {{ aptly_public_dir }}/;
+    }
+
+    location /artifacts/ {
+        alias {{ artifact_root }}/;
+        autoindex on;
+    }
+}

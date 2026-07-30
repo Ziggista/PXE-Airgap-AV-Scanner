@@ -1,0 +1,14 @@
+[Unit]
+Description=AV PXE Proxy Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/av-pxe-tooling
+ExecStart=/usr/bin/python3 /opt/av-pxe-tooling/tools/start_proxy.py --config /etc/av-pxe/proxy.json
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

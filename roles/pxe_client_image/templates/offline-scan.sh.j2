@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SOURCE_PATH="${1:-/mnt/source-media}"
+DESTINATION_PATH="${2:-/mnt/clean-output}"
+
+mkdir -p "$DESTINATION_PATH"
+
+clamscan --recursive --infected --no-summary "$SOURCE_PATH"
+yara --recursive /opt/av/rules/offline_rules.yar "$SOURCE_PATH"
+rsync -a --delete "$SOURCE_PATH"/ "$DESTINATION_PATH"/

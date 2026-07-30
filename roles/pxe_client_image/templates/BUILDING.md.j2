@@ -1,0 +1,10 @@
+# PXE Client Image Notes
+
+This role prepares the packages and wrapper scripts needed for the Ubuntu live PXE client.
+
+Expected next steps:
+
+1. Build or customize an Ubuntu live root filesystem.
+2. Add scanner binaries, signatures, and rules under `/opt/av`.
+3. Export `vmlinuz` and `initrd` into `{{ pxe_root | default('/srv/pxe') }}/images`.
+4. Add a post-boot network teardown step once signatures and policy content are loaded.

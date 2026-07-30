@@ -1,0 +1,6 @@
+---
+- name: Build PXE client live image workspace
+  hosts: pxe_client_image
+  become: true
+  roles:
+    - pxe_client_image

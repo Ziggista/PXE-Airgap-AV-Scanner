@@ -1,0 +1,19 @@
+{
+  "source_path": "/mnt/source-media",
+  "destination_path": "/mnt/clean-output",
+  "report_dir": "./runtime/reports",
+  "log_file": "./runtime/logs/pxe-client.log",
+  "allowed_exit_codes": [0],
+  "engines": [
+    {
+      "name": "ClamAV",
+      "enabled": false,
+      "command": "clamscan --recursive --infected --no-summary \"{source_path}\""
+    },
+    {
+      "name": "YARA Ruleset",
+      "enabled": false,
+      "command": "yara --recursive /opt/av/rules/offline_rules.yar \"{source_path}\""
+    }
+  ]
+}

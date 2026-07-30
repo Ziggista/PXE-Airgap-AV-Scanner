@@ -1,0 +1,19 @@
+{
+  "rootDir": "{{ aptly_root_dir }}",
+  "downloadConcurrency": 4,
+  "downloadSpeedLimit": 0,
+  "architectures": ["{{ ubuntu_architecture }}"],
+  "dependencyFollowSuggests": false,
+  "dependencyFollowRecommends": false,
+  "dependencyFollowAllVariants": false,
+  "dependencyFollowSource": false,
+  "gpgDisableSign": false,
+  "gpgDisableVerify": false,
+  "publishEndpoints": {
+    "public": {
+      "rootDir": "{{ aptly_public_dir }}",
+      "linkMethod": "copy",
+      "verifyMethod": "md5"
+    }
+  }
+}
