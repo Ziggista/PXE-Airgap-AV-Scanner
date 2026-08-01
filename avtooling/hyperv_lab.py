@@ -224,6 +224,14 @@ def _create_server_vm(spec: VmSpec, seeds: dict[str, Path], active_root: Path) -
     config_root = vm_root / spec.name
     vhd_path = vm_root / f"{spec.name}.vhdx"
     seed_iso = seeds[spec.seed_name or ""]
+    memory_command = (
+        f"Set-VMMemory -VMName '{spec.name}' -DynamicMemoryEnabled $true "
+        f"-MinimumBytes {spec.minimum_memory_bytes} -StartupBytes {spec.startup_memory_bytes} "
+        f"-MaximumBytes {spec.maximum_memory_bytes}"
+        if spec.dynamic_memory
+        else f"Set-VMMemory -VMName '{spec.name}' -DynamicMemoryEnabled $false "
+        f"-StartupBytes {spec.startup_memory_bytes}"
+    )
     script = rf"""
 $ErrorActionPreference = 'Stop'
 $vmRoot = '{vm_root}'
@@ -231,6 +239,11 @@ $configRoot = '{config_root}'
 $vhdPath = '{vhd_path}'
 $baseVhdx = '{DEFAULT_BASE_VHDX}'
 $seedIso = '{seed_iso}'
+
+if (Get-VM -Name '{spec.name}' -ErrorAction SilentlyContinue) {{
+  Stop-VM -Name '{spec.name}' -TurnOff -Force -ErrorAction SilentlyContinue | Out-Null
+  Remove-VM -Name '{spec.name}' -Force
+}}
 
 if (Test-Path -LiteralPath $vmRoot) {{
   Remove-Item -LiteralPath $vmRoot -Recurse -Force
@@ -244,8 +257,7 @@ New-VM -Name '{spec.name}' -Generation {spec.generation} -MemoryStartupBytes {sp
   -VHDPath $vhdPath -Path $configRoot -SwitchName '{DEFAULT_DEFAULT_SWITCH}' | Out-Null
 
 Set-VMProcessor -VMName '{spec.name}' -Count {spec.processors}
-Set-VMMemory -VMName '{spec.name}' -DynamicMemoryEnabled ${str(spec.dynamic_memory).lower()} `
-  -MinimumBytes {spec.minimum_memory_bytes} -StartupBytes {spec.startup_memory_bytes} -MaximumBytes {spec.maximum_memory_bytes}
+{memory_command}
 Set-VM -Name '{spec.name}' -AutomaticCheckpointsEnabled $false
 Set-VMNetworkAdapter -VMName '{spec.name}' -StaticMacAddress '{spec.default_switch_mac.replace(':', '')}'
 Set-VMFirmware -VMName '{spec.name}' -EnableSecureBoot {'On' if spec.secure_boot else 'Off'} `
@@ -269,10 +281,23 @@ Set-VMNetworkAdapter -VMName '{spec.name}' -Name '{adapter_name}' -StaticMacAddr
 def _create_pxe_test_vm(spec: VmSpec, active_root: Path) -> None:
     vm_root = active_root / spec.name
     config_root = vm_root / spec.name
+    memory_command = (
+        f"Set-VMMemory -VMName '{spec.name}' -DynamicMemoryEnabled $true "
+        f"-MinimumBytes {spec.minimum_memory_bytes} -StartupBytes {spec.startup_memory_bytes} "
+        f"-MaximumBytes {spec.maximum_memory_bytes}"
+        if spec.dynamic_memory
+        else f"Set-VMMemory -VMName '{spec.name}' -DynamicMemoryEnabled $false "
+        f"-StartupBytes {spec.startup_memory_bytes}"
+    )
     script = rf"""
 $ErrorActionPreference = 'Stop'
 $vmRoot = '{vm_root}'
 $configRoot = '{config_root}'
+
+if (Get-VM -Name '{spec.name}' -ErrorAction SilentlyContinue) {{
+  Stop-VM -Name '{spec.name}' -TurnOff -Force -ErrorAction SilentlyContinue | Out-Null
+  Remove-VM -Name '{spec.name}' -Force
+}}
 
 if (Test-Path -LiteralPath $vmRoot) {{
   Remove-Item -LiteralPath $vmRoot -Recurse -Force
@@ -283,8 +308,7 @@ New-VM -Name '{spec.name}' -Generation {spec.generation} -NoVHD -MemoryStartupBy
   -Path $configRoot -SwitchName '{DEFAULT_SWITCH_NAME}' | Out-Null
 
 Set-VMProcessor -VMName '{spec.name}' -Count {spec.processors}
-Set-VMMemory -VMName '{spec.name}' -DynamicMemoryEnabled ${str(spec.dynamic_memory).lower()} `
-  -MinimumBytes {spec.minimum_memory_bytes} -StartupBytes {spec.startup_memory_bytes} -MaximumBytes {spec.maximum_memory_bytes}
+{memory_command}
 Set-VM -Name '{spec.name}' -AutomaticCheckpointsEnabled $false
 Set-VMNetworkAdapter -VMName '{spec.name}' -StaticMacAddress '{spec.default_switch_mac.replace(':', '')}'
 Set-VMFirmware -VMName '{spec.name}' -EnableSecureBoot {'On' if spec.secure_boot else 'Off'} `
