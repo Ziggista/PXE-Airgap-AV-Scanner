@@ -143,7 +143,14 @@ run_clamav() {
   local status="clean"
   local detections=0
 
-  if clamscan --recursive --infected --database "$CLAM_DB" "$SOURCE_PATH" >"$log_file" 2>&1; then
+  if clamscan \
+    --recursive \
+    --infected \
+    --database "$CLAM_DB" \
+    --max-filesize=0 \
+    --max-scansize=0 \
+    --max-scantime=0 \
+    "$SOURCE_PATH" >"$log_file" 2>&1; then
     rc=0
     status="clean"
   else

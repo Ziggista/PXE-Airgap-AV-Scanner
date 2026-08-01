@@ -4,6 +4,7 @@ set -euo pipefail
 BASE="${1:-/tmp/av-test-media}"
 RAW="$BASE/raw"
 MNT="/mnt/av-test-media"
+DETECTION_GENERATOR="${DETECTION_GENERATOR:-}"
 
 sudo rm -rf "$RAW"
 sudo mkdir -p "$RAW" "$MNT"
@@ -47,15 +48,24 @@ startxref
 PDF
 }
 
+image_size_for_name() {
+  case "$1" in
+    infected-source) printf '768M\n' ;;
+    *) printf '128M\n' ;;
+  esac
+}
+
 make_image() {
   local fs="$1"
   local name="$2"
   local label="$3"
   local output_stem="${4:-${name}-${fs}}"
   local img="$RAW/${output_stem}.img"
+  local img_size
+  img_size="$(image_size_for_name "$name")"
 
   sudo rm -f "$img"
-  sudo truncate -s 128M "$img"
+  sudo truncate -s "$img_size" "$img"
 
   local loopdev
   loopdev="$(sudo losetup --find --show "$img")"
@@ -78,13 +88,17 @@ make_image() {
 
   case "$name" in
     infected-source)
-      printf 'X5O!P%%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' | sudo tee "$MNT/EICAR.COM" >/dev/null
-      sudo tee "$MNT/README.txt" >/dev/null <<TXT
+      if [[ -n "$DETECTION_GENERATOR" && -f "$DETECTION_GENERATOR" ]]; then
+        sudo python3 "$DETECTION_GENERATOR" --output-dir "$MNT" --profile infected-source
+      else
+        printf 'X5O!P%%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*' | sudo tee "$MNT/EICAR.COM" >/dev/null
+        sudo tee "$MNT/README.txt" >/dev/null <<TXT
 This disk intentionally contains the EICAR test file.
 Use it to verify that ClamAV blocks the media and produces a report.
 TXT
-      sudo mkdir -p "$MNT/samples"
-      printf 'Synthetic malware trigger test set.\n' | sudo tee "$MNT/samples/notes.txt" >/dev/null
+        sudo mkdir -p "$MNT/samples"
+        printf 'Synthetic malware trigger test set.\n' | sudo tee "$MNT/samples/notes.txt" >/dev/null
+      fi
       ;;
     benign-source)
       make_pdf "$MNT/public-handout-01.pdf" "Public PDF sample 01"
@@ -129,7 +143,9 @@ fs_code() {
   esac
 }
 
-for fs in ntfs exfat fat32 hfsplus; do
+IFS=' ' read -r -a fs_list <<< "${MEDIA_FS_LIST:-ntfs exfat fat32 hfsplus}"
+
+for fs in "${fs_list[@]}"; do
   code="$(fs_code "$fs")"
   make_image "$fs" infected-source "AVB-$code"
   make_image "$fs" benign-source "AVG-$code"

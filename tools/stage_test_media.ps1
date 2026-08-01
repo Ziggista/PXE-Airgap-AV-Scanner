@@ -10,6 +10,15 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+$ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$DetectionGenerator = Join-Path $ScriptRoot "generate_detection_corpus.py"
+$PythonCommand = if (Test-Path "C:\Users\Ziggi\AppData\Local\Python\pythoncore-3.14-64\python.exe") {
+    "C:\Users\Ziggi\AppData\Local\Python\pythoncore-3.14-64\python.exe"
+} elseif (Get-Command python -ErrorAction SilentlyContinue) {
+    "python"
+} else {
+    throw "Python was not found in PATH and the expected local Python path does not exist."
+}
 
 $fileSystemCodes = @{
     "NTFS" = "NTF"
@@ -24,14 +33,10 @@ $mediaSets = @(
         SizeBytes = 512MB
         Populate = {
             param([string]$Root)
-            $eicar = 'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*'
-            Set-Content -LiteralPath (Join-Path $Root "EICAR.COM") -Value $eicar -NoNewline -Encoding ASCII
-            Set-Content -LiteralPath (Join-Path $Root "README.txt") -Value @(
-                "This disk intentionally contains the EICAR test file."
-                "Use it to verify that ClamAV blocks the media and that the report path is populated."
-            ) -Encoding ASCII
-            New-Item -ItemType Directory -Path (Join-Path $Root "samples") | Out-Null
-            Set-Content -LiteralPath (Join-Path $Root "samples\notes.txt") -Value "Synthetic malware-trigger test media." -Encoding ASCII
+            & $PythonCommand $DetectionGenerator --output-dir $Root --profile infected-source
+            if ($LASTEXITCODE -ne 0) {
+                throw "Detection corpus generation failed for $Root"
+            }
         }
     }
     @{

@@ -5,12 +5,73 @@ rule Airgap_Office_Macro_Indicators
     severity = "medium"
     author = "PXE Airgap AV Scanner"
   strings:
+    $sub_auto_open = "Sub AutoOpen()" nocase
     $auto_open = "AutoOpen" nocase
     $document_open = "Document_Open" nocase
     $create_object = "CreateObject(" nocase
     $powershell = "powershell" nocase
+    $wscript_shell = "WScript.Shell" nocase
   condition:
-    2 of them
+    3 of them
+}
+
+rule Airgap_PDF_JavaScript_Indicators
+{
+  meta:
+    description = "Flags PDFs that embed obvious JavaScript execution markers"
+    severity = "medium"
+    author = "PXE Airgap AV Scanner"
+  strings:
+    $javascript = "/JavaScript" nocase
+    $js = "/JS" nocase
+    $open_action = "/OpenAction" nocase
+    $app_alert = "app.alert(" nocase
+    $export_object = "exportDataObject" nocase
+  condition:
+    3 of them
+}
+
+rule Airgap_JavaScript_Downloader_Indicators
+{
+  meta:
+    description = "Flags script files with classic downloader and shell-launch markers"
+    severity = "medium"
+    author = "PXE Airgap AV Scanner"
+  strings:
+    $activex = "ActiveXObject(" nocase
+    $wscript_shell = "WScript.Shell" nocase
+    $xmlhttp = "XMLHTTP" nocase
+    $powershell = "powershell -nop" nocase
+    $eval = "eval(" nocase
+    $from_char_code = "fromCharCode" nocase
+  condition:
+    3 of them
+}
+
+rule Airgap_Large_Docx_Carrier_Fixture
+{
+  meta:
+    description = "Flags the synthetic 150MB+ DOCX extension carrier used for offline validation"
+    severity = "medium"
+    author = "PXE Airgap AV Scanner"
+  strings:
+    $marker = "Synthetic DOCX extension carrier for ClamAV large-file testing." nocase
+  condition:
+    filesize > 150MB and $marker
+}
+
+rule Airgap_Large_Wav_Carrier_Fixture
+{
+  meta:
+    description = "Flags the synthetic 150MB+ WAV carrier used for offline validation"
+    severity = "medium"
+    author = "PXE Airgap AV Scanner"
+  strings:
+    $riff = "RIFF"
+    $wave = "WAVEfmt "
+    $eicar = "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
+  condition:
+    filesize > 150MB and $riff at 0 and $wave and $eicar
 }
 
 rule Airgap_PE_Suspicious_Dropper_Indicators
