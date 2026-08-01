@@ -43,6 +43,30 @@
     - "{{ pxe_client_overlay_root }}{{ pxe_client_vendor_bundle_root }}/bitdefender"
     - "{{ pxe_client_overlay_root }}/opt/av/rules"
 
+- name: Check staged upstream desktop ISO on the control node
+  ansible.builtin.stat:
+    path: "{{ pxe_client_upstream_iso_source }}"
+  delegate_to: localhost
+  become: false
+  register: pxe_client_upstream_iso_source_stat
+
+- name: Assert staged upstream desktop ISO exists on the control node
+  ansible.builtin.assert:
+    that:
+      - pxe_client_upstream_iso_source_stat.stat.exists
+      - pxe_client_upstream_iso_source_stat.stat.isreg
+    fail_msg: >-
+      The upstream desktop ISO is missing on the control node at
+      {{ pxe_client_upstream_iso_source }}.
+
+- name: Stage upstream desktop ISO onto the build VM
+  ansible.builtin.copy:
+    src: "{{ pxe_client_upstream_iso_source }}"
+    dest: "{{ pxe_client_upstream_iso }}"
+    owner: root
+    group: root
+    mode: "0644"
+
 - name: Render PXE client desktop autostart entry
   ansible.builtin.template:
     src: av-network-banner.desktop.j2

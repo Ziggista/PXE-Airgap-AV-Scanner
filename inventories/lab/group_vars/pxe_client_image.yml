@@ -8,6 +8,7 @@ pxe_client_remaster_root: "{{ pxe_client_workspace }}/remaster"
 pxe_client_remaster_extract_root: "{{ pxe_client_remaster_root }}/iso-root"
 pxe_client_remaster_edit_root: "{{ pxe_client_remaster_root }}/edit"
 pxe_client_upstream_iso: "{{ pxe_root }}/artifacts/ubuntu-26.04-desktop-amd64.iso"
+pxe_client_upstream_iso_source: "{{ project_root }}/runtime/downloads/ubuntu-26.04-desktop-amd64.iso"
 pxe_client_remaster_source_squashfs: "minimal.squashfs"
 pxe_client_squashfs_compressor: "zstd"
 pxe_client_squashfs_compression_level: 8

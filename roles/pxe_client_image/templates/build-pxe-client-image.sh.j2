@@ -27,6 +27,15 @@ rm -rf "$EXTRACT_ROOT" "$EDIT_ROOT"
 mkdir -p "$EXTRACT_ROOT" "$EDIT_ROOT"
 
 xorriso -osirrox on -indev "$BASE_ISO" -extract / "$EXTRACT_ROOT" >/dev/null 2>&1
+if [[ ! -f "$EXTRACT_ROOT/casper/$SOURCE_SQUASHFS" ]]; then
+  detected_squashfs="$(find "$EXTRACT_ROOT/casper" -maxdepth 1 -type f -name '*.squashfs' -printf '%f\n' | sort | head -n 1)"
+  if [[ -z "$detected_squashfs" ]]; then
+    echo "No squashfs payload was found under $EXTRACT_ROOT/casper" >&2
+    exit 1
+  fi
+  SOURCE_SQUASHFS="$detected_squashfs"
+  SOURCE_SIZE_FILE="${SOURCE_SQUASHFS%.squashfs}.size"
+fi
 unsquashfs -processors "$SQUASH_PROCS" -force -d "$EDIT_ROOT" "$EXTRACT_ROOT/casper/$SOURCE_SQUASHFS" >/dev/null
 cp -a "$OVERLAY_ROOT/." "$EDIT_ROOT/"
 
