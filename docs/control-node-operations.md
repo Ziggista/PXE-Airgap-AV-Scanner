@@ -77,5 +77,6 @@ This workflow:
 - rotates the existing lab VMs by renaming them with an `.old.<timestamp>` suffix
 - rebuilds the `cidata` seed ISOs for `control-node`, `repo-vm`, and `build-vm`
 - recreates fresh Hyper-V VMs with fixed MAC addresses and static first-boot management networking
+- copies the local automation SSH keypair into the fresh control node so Ansible can reach the proxy and build guests
 - deploys the control node, proxy node, PXE build node, PXE assets, and healthchecks from a clean clone on the control node
 - starts a fresh `av-pxe-uefi-test-vm` and verifies that the PXE DHCP reservation stays on `192.168.50.184`

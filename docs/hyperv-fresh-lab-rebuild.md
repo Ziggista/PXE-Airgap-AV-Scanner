@@ -22,15 +22,16 @@ python .\tools\rebuild_hyperv_lab.py
    - [inventories/lab/hosts.yml](C:/Users/Ziggi/AV/inventories/lab/hosts.yml)
    - the cloud-init `network-config` files
 5. Waits for SSH on the fresh control, proxy, and build VMs.
-6. Copies the local operator-managed `license_acceptance.yml` into a clean repo clone on the control node.
-7. Runs:
+6. Copies the local automation SSH keypair into `~/.ssh/` on the fresh control node.
+7. Copies the local operator-managed `license_acceptance.yml` into a clean repo clone on the control node.
+8. Runs:
    - `playbooks/control-node.yml`
    - `playbooks/repo-vm.yml`
    - `playbooks/build-vm.yml`
    - `playbooks/build-pxe-client-assets.yml`
    - `playbooks/healthcheck.yml`
-8. Starts a fresh `av-pxe-uefi-test-vm`.
-9. Verifies that the PXE client reservation appears on `192.168.50.184`.
+9. Starts a fresh `av-pxe-uefi-test-vm`.
+10. Verifies that the PXE client reservation appears on `192.168.50.184`.
 
 ## Important prerequisites
 

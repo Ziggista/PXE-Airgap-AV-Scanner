@@ -362,20 +362,29 @@ def deploy_from_control_node(
         raise HyperVLabError("Control node IP is not configured.")
     license_file = repo_root / "inventories" / "lab" / "group_vars" / "all" / "license_acceptance.yml"
     remote_license = f"{remote_repo_root}/inventories/lab/group_vars/all/license_acceptance.yml"
+    public_key = private_key.with_suffix(".pub")
+    if not public_key.exists():
+        raise HyperVLabError(f"SSH public key not found: {public_key}")
 
     remote_bootstrap = " && ".join(
         [
             f"rm -rf {_remote_shell_quote(remote_repo_root)}",
             f"git clone --branch {_remote_shell_quote(branch)} {_remote_shell_quote(repo_url)} {_remote_shell_quote(remote_repo_root)}",
+            "mkdir -p ~/.ssh",
         ]
     )
     _run(_ssh_base(private_key) + [f"ziggi-py@{control_ip}", remote_bootstrap])
 
+    _run(_scp_base(private_key) + [str(private_key), f"ziggi-py@{control_ip}:~/.ssh/ziggi-py-host-ed25519"])
+    _run(_scp_base(private_key) + [str(public_key), f"ziggi-py@{control_ip}:~/.ssh/ziggi-py-host-ed25519.pub"])
     _run(_scp_base(private_key) + [str(license_file), f"ziggi-py@{control_ip}:{remote_license}"])
 
     remote_deploy = " && ".join(
         [
             f"cd {_remote_shell_quote(remote_repo_root)}",
+            "chmod 700 ~/.ssh",
+            "chmod 600 ~/.ssh/ziggi-py-host-ed25519",
+            "chmod 644 ~/.ssh/ziggi-py-host-ed25519.pub",
             "sudo cloud-init status --wait --long",
             "bash ./scripts/bootstrap-ansible.sh",
             "ansible-playbook -i inventories/lab/hosts.yml playbooks/control-node.yml",
