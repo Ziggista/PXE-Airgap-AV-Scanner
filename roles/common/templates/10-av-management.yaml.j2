@@ -1,0 +1,25 @@
+network:
+  version: 2
+  ethernets:
+    {{ av_management_interface }}:
+      match:
+        macaddress: "{{ av_management_interface_mac }}"
+      set-name: "{{ av_management_interface }}"
+      dhcp4: false
+      dhcp6: false
+      addresses:
+        - {{ av_management_address }}
+      routes:
+        - to: default
+          via: {{ av_management_gateway }}
+      nameservers:
+        addresses:
+{% for dns_server in av_management_dns_servers %}
+          - {{ dns_server }}
+{% endfor %}
+{% if av_management_search_domains | default([]) %}
+        search:
+{% for domain in av_management_search_domains %}
+          - {{ domain }}
+{% endfor %}
+{% endif %}

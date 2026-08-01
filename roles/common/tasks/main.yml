@@ -8,3 +8,27 @@
   ansible.builtin.apt:
     name: "{{ common_packages }}"
     state: present
+
+- name: Render static management netplan
+  ansible.builtin.template:
+    src: 10-av-management.yaml.j2
+    dest: /etc/netplan/10-av-management.yaml
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - av_management_interface is defined
+    - av_management_interface_mac is defined
+    - av_management_address is defined
+    - av_management_gateway is defined
+    - av_management_dns_servers is defined
+  notify: Apply management netplan
+
+- name: Apply management netplan before continuing
+  ansible.builtin.meta: flush_handlers
+  when:
+    - av_management_interface is defined
+    - av_management_interface_mac is defined
+    - av_management_address is defined
+    - av_management_gateway is defined
+    - av_management_dns_servers is defined

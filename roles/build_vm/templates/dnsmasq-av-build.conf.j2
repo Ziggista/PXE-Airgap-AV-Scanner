@@ -1,6 +1,9 @@
 port=0
 log-dhcp
 dhcp-range={{ pxe_server_dhcp_range_start }},{{ pxe_server_dhcp_range_end }},{{ pxe_server_dhcp_lease }}
+{% if pxe_server_client_reserved_mac is defined and pxe_server_client_reserved_ip is defined %}
+dhcp-host={{ pxe_server_client_reserved_mac }},{{ pxe_server_client_reserved_ip }}{% if pxe_server_client_reserved_hostname is defined %},{{ pxe_server_client_reserved_hostname }}{% endif %},{{ pxe_server_dhcp_lease }}
+{% endif %}
 dhcp-match=set:bios,option:client-arch,0
 dhcp-match=set:efi64,option:client-arch,7
 dhcp-match=set:efi64,option:client-arch,9
