@@ -144,7 +144,7 @@ class Banner(Gtk.Window):
         header.set_markup(
             "<span foreground='white' background='{{ pxe_client_desktop_banner_color }}' size='"
             + str(header_size)
-            + "'><b>DISCONNECT ONLY AFTER DEFINITION SYNC IS READY</b></span>"
+            + "'><b>DISCONNECT NETWORK BEFORE SCANNING MEDIA</b></span>"
         )
 
         self.summary = Gtk.Label()
@@ -153,7 +153,7 @@ class Banner(Gtk.Window):
         self.summary.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
         self.summary.set_justify(Gtk.Justification.LEFT)
         self.summary.set_markup(
-            f"<span size='{body_size}'>This client is intended to scan public media offline. AV definitions are loaded from the boot image, staged locally in RAM, then validated for recency before scanning is allowed.</span>"
+            f"<span size='{body_size}'>This disposable client is intended to scan public media offline. AV definitions and rules are bundled during image build, copied into RAM during boot, and validated locally for freshness before scanning is allowed.</span>"
         )
 
         self.definition_info = Gtk.Label()
@@ -294,7 +294,7 @@ class Banner(Gtk.Window):
             self.freshness_status.set_markup("<span foreground='red' size='13000'><b>Bundled AV definitions were not staged correctly. Do not use this client until the image is rebuilt.</b></span>")
             return
         if status == "running":
-            self.freshness_status.set_markup("<span foreground='orange' size='13000'><b>Bundled AV definitions are still being staged locally. Wait for readiness.</b></span>")
+            self.freshness_status.set_markup("<span foreground='orange' size='13000'><b>Bundled AV definitions are still being copied from the boot image into RAM. Wait for readiness.</b></span>")
             return
         if status != "ready":
             self.freshness_status.set_markup("<span foreground='orange' size='13000'><b>Bundled AV definition status is pending. Refresh before scanning.</b></span>")
@@ -305,7 +305,7 @@ class Banner(Gtk.Window):
         elif freshness == "warning":
             self.freshness_status.set_markup("<span foreground='#b36b00' size='13000'><b>Bundled definitions are older than the 24-hour target but still within the temporary tolerance window. Rebuild the image soon.</b></span>")
         elif TEST_MODE:
-            self.freshness_status.set_markup("<span foreground='green' size='13000'><b>Bundled AV definitions are ready. Post-splash debug callbacks are disabled by default, and this RAM-resident client has already attempted to drop network access before showing this splash.</b></span>")
+            self.freshness_status.set_markup("<span foreground='green' size='13000'><b>Bundled AV definitions are ready. Test-mode debug callbacks are suppressed after the splash by default, and this RAM-resident client has already attempted to drop network access before showing this screen.</b></span>")
         else:
             self.freshness_status.set_markup("<span foreground='green' size='13000'><b>Bundled AV definitions are ready. The scanner should now operate from its local runtime copy with network disabled.</b></span>")
 

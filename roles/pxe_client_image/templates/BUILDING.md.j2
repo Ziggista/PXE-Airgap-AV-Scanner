@@ -55,6 +55,7 @@ This workspace prepares a PXE-booted Ubuntu live client that:
 - Autologin user: `{{ pxe_client_username }}`
 - Test/admin SSH user: `{{ pxe_client_admin_username }}`
 - Before the desktop is considered ready, `av-definition-sync.service` stages the bundled ClamAV definitions from the boot image into `/run/av/definitions/clamav`
+- The desktop splash reports on the freshness of the definitions baked into the image; it no longer represents a live network signature download step
 - The current production scan path is intentionally limited to `ClamAV` and the bundled `YARA` rule set. Commercial engine placeholders remain out of the operator path until real licensed bundles are staged.
 - The client now PXE boots with `netboot=url` and `toram`, so the live media is copied into RAM instead of keeping the root filesystem on NFS
 - The kiosk session attempts to shut down all non-loopback networking before the red splash is shown
