@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export XDG_CURRENT_DESKTOP=Openbox
+export XDG_SESSION_DESKTOP=openbox
+export XDG_MENU_PREFIX=openbox-
+mkdir -p /var/log/av-pxe
+echo "[$(date -Iseconds)] av-kiosk-session starting" >>/var/log/av-pxe/session.log
+
+/usr/local/bin/capture-runtime-debug.py || true
+/usr/local/bin/report-debug-event.sh kiosk-session-started "The kiosk session wrapper is starting Openbox." || true
+
+exec openbox-session

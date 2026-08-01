@@ -233,3 +233,17 @@ Each provider should define:
 - exit-code handling
 - log parsing
 - quarantine or copy decision behavior
+
+## Current repo implementation status
+
+As of Friday, July 31, 2026, the PXE client runtime currently has:
+
+- `ClamAV` wired into freshness enforcement and offline scanning
+- `YARA` wired into freshness reporting and offline scanning
+- `Microsoft Defender for Endpoint`, `Sophos Protection for Linux`, and `Bitdefender Endpoint Security Tools` represented as explicit provider placeholders only
+
+Those commercial providers now appear in the PXE client readiness metadata and splash screen as `awaiting_bundle` until a licensed installer bundle and vendor-approved offline update flow are provided.
+
+Codex did not accept commercial license terms on the operator's behalf. That step must be completed manually by an authorized user before those bundles are staged into the repo or build pipeline.
+
+The lab now tracks this explicitly in [inventories/lab/group_vars/all/license_acceptance.yml.example](/C:/Users/Ziggi/AV/inventories/lab/group_vars/all/license_acceptance.yml.example). Copy it locally to `inventories/lab/group_vars/all/license_acceptance.yml`, which is gitignored, then update the local file after an authorized operator accepts the relevant terms. Until a vendor entry is marked `accepted: true`, the PXE client reports that provider as `awaiting_acceptance`. Once accepted, the status moves to `awaiting_bundle` until the licensed installer payload is actually staged.

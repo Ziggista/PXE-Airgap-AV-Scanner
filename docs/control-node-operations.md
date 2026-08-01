@@ -44,3 +44,16 @@ To re-sync later:
 ```powershell
 python .\tools\update_local_repo.py
 ```
+
+## Hyper-V inventory refresh
+
+The lab inventory uses Hyper-V `Default Switch` addresses for the control, proxy, and build VMs. Those management IPs can change after a guest reboot, host reboot, or storage move.
+
+Use the local helper before Ansible runs if a lab VM becomes unreachable:
+
+```powershell
+python .\tools\refresh_hyperv_inventory.py --check
+python .\tools\refresh_hyperv_inventory.py
+```
+
+As of Friday, July 31, 2026, the build VM moved from `172.23.25.109` to `172.23.30.254` after a restart following its VHDX relocation from `D:` to `C:`.

@@ -1,0 +1,4 @@
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin {{ pxe_client_username }} --noclear %I $TERM
+Type=simple

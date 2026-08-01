@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+import argparse
+import json
+import subprocess
+from pathlib import Path
+
+
+def write_log(log_file: Path, content: str) -> None:
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    log_file.write_text(content, encoding="utf-8")
+
+
+def load_manifest(engine: str):
+    manifest_path = Path("/opt/av/bundles") / engine / "bundle-manifest.json"
+    if not manifest_path.exists():
+        return None, manifest_path
+    try:
+        return json.loads(manifest_path.read_text(encoding="utf-8")), manifest_path
+    except (OSError, json.JSONDecodeError) as exc:
+        return {"_error": f"Failed to parse manifest: {exc}"}, manifest_path
+
+
+def format_command(command, source_path: str):
+    return [part.replace("{source_path}", source_path) for part in command]
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--engine", required=True)
+    parser.add_argument("--source-path", required=True)
+    parser.add_argument("--log-file", required=True)
+    args = parser.parse_args()
+
+    log_file = Path(args.log_file)
+    manifest, manifest_path = load_manifest(args.engine)
+
+    if manifest is None:
+        write_log(log_file, f"No staged manifest found at {manifest_path}\n")
+        print("skipped")
+        print("0")
+        print("0")
+        return 0
+
+    if "_error" in manifest:
+        write_log(log_file, manifest["_error"] + "\n")
+        print("error")
+        print("2")
+        print("0")
+        return 0
+
+    scan_command = manifest.get("scan_command")
+    if not isinstance(scan_command, list) or not scan_command:
+        write_log(log_file, f"Manifest {manifest_path} does not define a usable scan_command list.\n")
+        print("skipped")
+        print("0")
+        print("0")
+        return 0
+
+    command = format_command(scan_command, args.source_path)
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+    except OSError as exc:
+        write_log(log_file, f"Failed to execute {command!r}: {exc}\n")
+        print("error")
+        print("127")
+        print("0")
+        return 0
+    combined = result.stdout or ""
+    if result.stderr:
+        combined += ("\n" if combined else "") + result.stderr
+    if not combined.endswith("\n"):
+        combined += "\n"
+    write_log(log_file, combined)
+
+    clean_codes = set(manifest.get("clean_exit_codes", [0]))
+    detected_codes = set(manifest.get("detected_exit_codes", [1]))
+    detection_markers = manifest.get("detection_markers", [])
+    if not isinstance(detection_markers, list):
+        detection_markers = []
+
+    detections = 0
+    for line in combined.splitlines():
+        for marker in detection_markers:
+            if marker and marker in line:
+                detections += 1
+                break
+
+    status = "error"
+    if result.returncode in clean_codes:
+        status = "detected" if detections > 0 else "clean"
+    elif result.returncode in detected_codes:
+        status = "detected"
+        if detections == 0:
+            detections = 1
+
+    print(status)
+    print(result.returncode)
+    print(detections)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

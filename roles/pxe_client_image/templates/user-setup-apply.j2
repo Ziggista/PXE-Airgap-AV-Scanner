@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Casper expects this helper during live-user setup. Our remaster creates the
+# dedicated scanner account up front so later boot hooks can chown the home
+# directory and hand off cleanly to nodm.
+/usr/local/sbin/ensure-live-scanner-user.sh

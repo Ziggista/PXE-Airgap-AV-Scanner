@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+import json
+from datetime import datetime, timezone
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+DEBUG_ROOT = Path("{{ pxe_server_debug_root }}")
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "AVDebugCollector/1.0"
+
+    def do_POST(self):
+        if self.path.rstrip("/") != "/debug/pxe-client":
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+
+        length = int(self.headers.get("Content-Length", "0"))
+        payload = self.rfile.read(length)
+        now = datetime.now(timezone.utc)
+        DEBUG_ROOT.mkdir(parents=True, exist_ok=True)
+
+        try:
+            body = json.loads(payload.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            body = {"raw": payload.decode("utf-8", errors="replace")}
+
+        body["_received_at"] = now.isoformat()
+        line = json.dumps(body, sort_keys=True)
+        logfile = DEBUG_ROOT / f"{now.strftime('%Y-%m-%d')}.jsonl"
+        with logfile.open("a", encoding="utf-8") as handle:
+            handle.write(line)
+            handle.write("\n")
+
+        self.send_response(HTTPStatus.ACCEPTED)
+        self.end_headers()
+        self.wfile.write(b"accepted\n")
+
+    def log_message(self, fmt, *args):
+        return
+
+
+def main():
+    server = ThreadingHTTPServer(("127.0.0.1", 8081), Handler)
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()

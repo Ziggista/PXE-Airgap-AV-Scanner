@@ -13,7 +13,7 @@ This node is the PXE boot and image build server.
 - PXE root: `{{ pxe_root }}`
 - TFTP root: `{{ tftp_root }}`
 - Client image workspace: `{{ pxe_server_workspace }}`
-- Live-build root: `{{ pxe_server_livebuild_root }}`
+- Debug callback log root: `{{ pxe_server_debug_root }}`
 - Published client image path: `{{ pxe_server_client_publish_dir }}`
 - Published definitions path: `{{ pxe_server_definitions_publish_dir }}`
 
@@ -29,13 +29,26 @@ This node is the PXE boot and image build server.
 
    `ansible-playbook playbooks/pxe-client-image.yml`
 
-3. Build the live image on this node:
+3. Build the remastered desktop ISO on this node:
 
    `sudo {{ pxe_client_output_dir | default('/srv/pxe-client-image/output') }}/build-pxe-client-image.sh`
 
-4. Publish `vmlinuz`, `initrd`, and `filesystem.squashfs` into:
+4. Publish the bootable client ISO, `vmlinuz`, `initrd`, and extracted live-root tree into:
 
-   `{{ pxe_server_client_publish_dir }}`
+   `{{ pxe_server_client_publish_dir }}` and `{{ pxe_root }}/artifacts`
+
+## Current development boot profile
+
+- Active boot method: `{{ pxe_server_boot_method }}`
+- Active client base URL for PXE-side consumers: `{{ pxe_server_client_base_url }}`
+- Kernel path: `{{ pxe_server_boot_kernel_path }}`
+- Initrd path: `{{ pxe_server_boot_initrd_path }}`
+- Boot append: `{{ pxe_server_boot_append }}`
+- Preferred Hyper-V client generation for development: `Generation 2 (UEFI)`
+
+When `pxe_server_boot_method` is `nfs-root`, the PXE server boots the client kernel/initrd over PXE and exports the extracted live-root tree over NFS. This avoids downloading the whole desktop ISO in initramfs and is the preferred development path for the remastered client.
+
+For this lab, treat legacy BIOS PXE as secondary. The current validated path is UEFI iPXE on Hyper-V Generation 2 guests.
 
 ## Daily definition refresh
 
@@ -44,4 +57,4 @@ Run these Ansible playbooks from the control node:
 1. `ansible-playbook playbooks/repo-vm.yml`
 2. `ansible-playbook playbooks/sync-pxe-definitions.yml`
 
-This updates ClamAV signatures on the proxy and PXE server without rebuilding the live image.
+This updates ClamAV signatures on the proxy and PXE server without rebuilding the client ISO.

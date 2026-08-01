@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+LOCK_FILE="/run/av/post-splash-network-disabled"
+LOG_FILE="/var/log/av-pxe/network-disable.log"
+
+mkdir -p /run/av /var/log/av-pxe
+
+{
+  echo "[$(date -Iseconds)] disabling post-splash network access"
+
+  if command -v nmcli >/dev/null 2>&1; then
+    nmcli networking off || true
+  fi
+
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl stop NetworkManager.service 2>/dev/null || true
+    systemctl stop systemd-networkd.service 2>/dev/null || true
+    systemctl stop wpa_supplicant.service 2>/dev/null || true
+  fi
+
+  while IFS= read -r iface; do
+    [[ -n "$iface" ]] || continue
+    ip addr flush dev "$iface" 2>/dev/null || true
+    ip link set dev "$iface" down 2>/dev/null || true
+    echo "disabled interface: $iface"
+  done < <(ip -o link show | awk -F': ' '{print $2}' | grep -Ev '^(lo)$')
+
+  echo "1" > "$LOCK_FILE"
+  echo "[$(date -Iseconds)] network disable complete"
+} >>"$LOG_FILE" 2>&1

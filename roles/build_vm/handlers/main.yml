@@ -9,5 +9,19 @@
     name: nginx
     state: reloaded
 
+- name: Reload apparmor
+  ansible.builtin.service:
+    name: apparmor
+    state: reloaded
+
 - name: Apply netplan
   ansible.builtin.command: netplan apply
+
+- name: Restart av debug collector
+  ansible.builtin.systemd_service:
+    name: av-debug-collector
+    daemon_reload: true
+    state: restarted
+
+- name: Reload nfs exports
+  ansible.builtin.command: exportfs -ra

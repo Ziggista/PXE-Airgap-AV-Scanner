@@ -1,0 +1,29 @@
+rule Airgap_Office_Macro_Indicators
+{
+  meta:
+    description = "Flags documents with common VBA macro markers for secondary review"
+    severity = "medium"
+    author = "PXE Airgap AV Scanner"
+  strings:
+    $auto_open = "AutoOpen" nocase
+    $document_open = "Document_Open" nocase
+    $create_object = "CreateObject(" nocase
+    $powershell = "powershell" nocase
+  condition:
+    2 of them
+}
+
+rule Airgap_PE_Suspicious_Dropper_Indicators
+{
+  meta:
+    description = "Flags binaries with simple suspicious command indicators for review"
+    severity = "medium"
+    author = "PXE Airgap AV Scanner"
+  strings:
+    $cmd = "cmd.exe /c" nocase
+    $regsvr = "regsvr32" nocase
+    $bitsadmin = "bitsadmin" nocase
+    $wscript = "wscript.shell" nocase
+  condition:
+    2 of them
+}

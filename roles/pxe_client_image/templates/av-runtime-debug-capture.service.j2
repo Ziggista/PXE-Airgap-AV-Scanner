@@ -1,0 +1,11 @@
+[Unit]
+Description=Capture PXE client runtime session debug snapshot in test mode
+After=multi-user.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/capture-runtime-debug.py
+
+[Install]
+WantedBy=multi-user.target

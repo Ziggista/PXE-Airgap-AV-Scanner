@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TARGET="{{ pxe_client_livebuild_root }}/config/includes.chroot/opt/av/definitions/clamav"
+TARGET="{{ pxe_client_overlay_root }}/opt/av/definitions/clamav"
 mkdir -p "$TARGET"
 fetched=0
 for file in main.cvd daily.cvd bytecode.cvd main.cld daily.cld bytecode.cld; do

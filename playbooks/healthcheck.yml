@@ -1,0 +1,173 @@
+---
+- name: Healthcheck control node
+  hosts: control_node
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Gather service facts
+      ansible.builtin.service_facts:
+
+    - name: Check control node commands
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - ansible-playbook --version
+        - git --version
+      register: control_node_command_checks
+      changed_when: false
+
+    - name: Check control node project root
+      ansible.builtin.stat:
+        path: "{{ project_root }}"
+      register: control_node_project_root
+
+    - name: Assert control node health
+      ansible.builtin.assert:
+        that:
+          - "'ssh.service' in ansible_facts.services or 'ssh.socket' in ansible_facts.services"
+          - control_node_project_root.stat.exists
+          - control_node_project_root.stat.isdir
+          - control_node_command_checks.results | map(attribute='rc') | max == 0
+        fail_msg: Control node healthcheck failed.
+
+    - name: Report control node summary
+      ansible.builtin.debug:
+        msg:
+          host: "{{ inventory_hostname }}"
+          ssh_service_state: >-
+            {{
+              ansible_facts.services.get('ssh.service', ansible_facts.services.get('ssh.socket', {})).state
+              | default('unknown')
+            }}
+          project_root: "{{ project_root }}"
+          ansible_version_ok: true
+          git_ok: true
+
+- name: Healthcheck proxy node
+  hosts: repo_vm
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Gather service facts
+      ansible.builtin.service_facts:
+
+    - name: Check proxy web endpoints
+      ansible.builtin.uri:
+        url: "{{ item }}"
+        status_code: 200
+      loop:
+        - "http://127.0.0.1/definitions/"
+        - "http://127.0.0.1/definitions/clamav/"
+        - "http://127.0.0.1/artifacts/"
+      register: repo_vm_uri_checks
+      changed_when: false
+
+    - name: Check ClamAV definition files on proxy
+      ansible.builtin.stat:
+        path: "{{ repo_vm_clamav_root }}/{{ item }}"
+      loop:
+        - daily.cld
+        - daily.cvd
+        - main.cld
+        - main.cvd
+      register: repo_vm_definition_files
+
+    - name: Assert proxy health
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services['nginx.service'].state == 'running'
+          - repo_vm_uri_checks.results | map(attribute='status') | min == 200
+          - repo_vm_definition_files.results | selectattr('stat.exists') | list | length > 0
+        fail_msg: Proxy node healthcheck failed.
+
+    - name: Report proxy summary
+      ansible.builtin.debug:
+        msg:
+          host: "{{ inventory_hostname }}"
+          nginx_state: "{{ ansible_facts.services['nginx.service'].state }}"
+          definitions_present: >-
+            {{
+              repo_vm_definition_files.results
+              | selectattr('stat.exists')
+              | map(attribute='stat.path')
+              | list
+            }}
+          definitions_url: "http://{{ ansible_host }}/definitions/clamav/"
+          artifacts_url: "http://{{ ansible_host }}/artifacts/"
+
+- name: Healthcheck PXE build node
+  hosts: build_vm
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Gather service facts
+      ansible.builtin.service_facts:
+
+    - name: Check PXE build local web endpoints
+      ansible.builtin.uri:
+        url: "{{ item }}"
+        status_code: 200
+      loop:
+        - "http://127.0.0.1/artifacts/{{ pxe_server_boot_iso_filename }}"
+        - "http://127.0.0.1/{{ pxe_server_boot_kernel_path }}"
+        - "http://127.0.0.1/{{ pxe_server_boot_initrd_path }}"
+        - "http://127.0.0.1/definitions/clamav/"
+      register: build_vm_local_uri_checks
+      changed_when: false
+
+    - name: Check PXE build can reach proxy definitions
+      ansible.builtin.uri:
+        url: "{{ pxe_server_proxy_definitions_base_url }}/clamav/"
+        status_code: 200
+      register: build_vm_proxy_uri_check
+      changed_when: false
+
+    - name: Check PXE build artifacts on disk
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ pxe_client_output_iso }}"
+        - "{{ pxe_server_client_publish_dir }}/vmlinuz"
+        - "{{ pxe_server_client_publish_dir }}/initrd"
+        - "{{ tftp_root }}/boot.ipxe"
+        - "{{ tftp_root }}/snponly.efi"
+        - "{{ tftp_root }}/undionly.kpxe"
+      register: build_vm_artifact_stats
+
+    - name: Check active ClamAV and YARA bundle files in overlay
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ pxe_client_overlay_root }}/opt/av/definitions/clamav"
+        - "{{ pxe_client_overlay_root }}{{ pxe_client_yara_rules_path }}"
+        - "{{ pxe_client_overlay_root }}{{ pxe_client_yara_rules_metadata_path }}"
+      register: build_vm_engine_bundle_stats
+
+    - name: Assert PXE build node health
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services['dnsmasq.service'].state == 'running'
+          - ansible_facts.services['nginx.service'].state == 'running'
+          - ansible_facts.services['tftpd-hpa.service'].state == 'running'
+          - ansible_facts.services['av-debug-collector.service'].state == 'running'
+          - build_vm_local_uri_checks.results | map(attribute='status') | min == 200
+          - build_vm_proxy_uri_check.status == 200
+          - build_vm_artifact_stats.results | selectattr('stat.exists', 'equalto', false) | list | length == 0
+          - build_vm_engine_bundle_stats.results | selectattr('stat.exists', 'equalto', false) | list | length == 0
+        fail_msg: PXE build node healthcheck failed.
+
+    - name: Report PXE build summary
+      ansible.builtin.debug:
+        msg:
+          host: "{{ inventory_hostname }}"
+          services:
+            dnsmasq: "{{ ansible_facts.services['dnsmasq.service'].state }}"
+            nginx: "{{ ansible_facts.services['nginx.service'].state }}"
+            tftpd_hpa: "{{ ansible_facts.services['tftpd-hpa.service'].state }}"
+            av_debug_collector: "{{ ansible_facts.services['av-debug-collector.service'].state }}"
+          client_iso: "{{ pxe_client_output_iso }}"
+          boot_iso_url: "{{ pxe_server_boot_iso_url }}"
+          proxy_definitions_url: "{{ pxe_server_proxy_definitions_base_url }}/clamav/"
+          active_engines:
+            - clamav
+            - yara
+          yara_rules_path: "{{ pxe_client_overlay_root }}{{ pxe_client_yara_rules_path }}"

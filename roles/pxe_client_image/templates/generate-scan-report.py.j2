@@ -1,0 +1,323 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import html
+import json
+from pathlib import Path
+
+
+STATUS_CLASS = {
+    "approved": "ok",
+    "blocked": "bad",
+    "clean": "ok",
+    "detected": "bad",
+    "error": "warn",
+    "skipped": "neutral",
+}
+
+
+def parse_env(path: Path) -> dict[str, str]:
+    data: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        data[key] = value
+    return data
+
+
+def parse_summary(path: Path) -> list[dict[str, str]]:
+    rows = []
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if not lines:
+        return rows
+    for line in lines[1:]:
+        if not line.strip():
+            continue
+        engine_id, display_name, status, exit_code, detections, log_file = line.split("\t")
+        rows.append(
+            {
+                "engine_id": engine_id,
+                "display_name": display_name,
+                "status": status,
+                "exit_code": exit_code,
+                "detections": detections,
+                "log_file": log_file,
+            }
+        )
+    return rows
+
+
+def build_payload(metadata: dict[str, str], rows: list[dict[str, str]]) -> dict[str, object]:
+    blocked = sum(1 for row in rows if row["status"] in {"detected", "error"})
+    clean = sum(1 for row in rows if row["status"] == "clean")
+    skipped = sum(1 for row in rows if row["status"] == "skipped")
+    return {
+        "run_id": metadata.get("RUN_ID", ""),
+        "started_at": metadata.get("STARTED_AT", ""),
+        "finished_at": metadata.get("FINISHED_AT", ""),
+        "source_path": metadata.get("SOURCE_PATH", ""),
+        "source_filesystem": metadata.get("SOURCE_FILESYSTEM", "unknown"),
+        "source_device": metadata.get("SOURCE_DEVICE", "unknown"),
+        "source_label": metadata.get("SOURCE_LABEL", "unknown"),
+        "destination_path": metadata.get("DESTINATION_PATH", ""),
+        "destination_filesystem": metadata.get("DESTINATION_FILESYSTEM", "unknown"),
+        "destination_device": metadata.get("DESTINATION_DEVICE", "unknown"),
+        "destination_label": metadata.get("DESTINATION_LABEL", "unknown"),
+        "test_mode": metadata.get("TEST_MODE", "0") == "1",
+        "overall_status": metadata.get("OVERALL_STATUS", "blocked"),
+        "engines": rows,
+        "totals": {
+            "engines": len(rows),
+            "clean": clean,
+            "blocked": blocked,
+            "skipped": skipped,
+        },
+    }
+
+
+def render_engine(row: dict[str, str]) -> str:
+    log_path = Path(row["log_file"])
+    try:
+      log_text = log_path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+      log_text = f"Unable to read log: {exc}"
+    return f"""
+    <details class="engine">
+      <summary>
+        <span class="engine-name">{html.escape(row['display_name'])}</span>
+        <span class="pill {STATUS_CLASS.get(row['status'], 'neutral')}">{html.escape(row['status'])}</span>
+        <span class="meta">detections: {html.escape(row['detections'])}</span>
+        <span class="meta">exit: {html.escape(row['exit_code'])}</span>
+      </summary>
+      <div class="detail-grid">
+        <div><strong>Engine ID</strong><br>{html.escape(row['engine_id'])}</div>
+        <div><strong>Log file</strong><br>{html.escape(row['log_file'])}</div>
+      </div>
+      <pre>{html.escape(log_text)}</pre>
+    </details>
+    """
+
+
+def render_html(payload: dict[str, object]) -> str:
+    totals = payload["totals"]
+    overall = str(payload["overall_status"])
+    test_mode = "Enabled" if payload["test_mode"] else "Disabled"
+    engines_html = "\n".join(render_engine(row) for row in payload["engines"])
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AV Scan Summary {html.escape(str(payload['run_id']))}</title>
+  <style>
+    :root {{
+      --bg: #f3efe7;
+      --panel: #fffdf8;
+      --ink: #1f2328;
+      --muted: #5f6b76;
+      --ok: #1b7f4a;
+      --bad: #a11a1a;
+      --warn: #b26a00;
+      --neutral: #6b7280;
+      --line: #d7d0c4;
+      --accent: #9f1d1d;
+    }}
+    body {{
+      margin: 0;
+      font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+      background: linear-gradient(180deg, #efe4d2 0%, var(--bg) 24%, #ece8df 100%);
+      color: var(--ink);
+    }}
+    .wrap {{
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 32px 24px 48px;
+    }}
+    .hero {{
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 28px;
+      box-shadow: 0 18px 50px rgba(84, 62, 32, 0.12);
+    }}
+    h1, h2 {{
+      margin: 0 0 12px;
+    }}
+    p {{
+      color: var(--muted);
+      margin: 0;
+    }}
+    .status-line {{
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: 16px;
+    }}
+    .pill {{
+      display: inline-block;
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 0.88rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: white;
+    }}
+    .ok {{ background: var(--ok); }}
+    .bad {{ background: var(--bad); }}
+    .warn {{ background: var(--warn); }}
+    .neutral {{ background: var(--neutral); }}
+    .summary-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-top: 24px;
+    }}
+    .card {{
+      background: rgba(255,255,255,0.78);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px;
+    }}
+    .card .label {{
+      color: var(--muted);
+      font-size: 0.84rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }}
+    .card .value {{
+      font-size: 1.75rem;
+      font-weight: 800;
+      margin-top: 6px;
+    }}
+    .meta-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+      margin-top: 24px;
+    }}
+    .section {{
+      margin-top: 28px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 24px;
+      box-shadow: 0 14px 40px rgba(84, 62, 32, 0.08);
+    }}
+    .engine {{
+      border-top: 1px solid var(--line);
+      padding: 16px 0;
+    }}
+    .engine:first-of-type {{
+      border-top: 0;
+      padding-top: 0;
+    }}
+    summary {{
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      font-weight: 700;
+    }}
+    summary::-webkit-details-marker {{
+      display: none;
+    }}
+    .engine-name {{
+      font-size: 1rem;
+      min-width: 140px;
+    }}
+    .meta {{
+      color: var(--muted);
+      font-weight: 600;
+    }}
+    .detail-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin: 16px 0;
+      color: var(--muted);
+    }}
+    pre {{
+      background: #1a1c1f;
+      color: #f7f7f4;
+      padding: 16px;
+      border-radius: 16px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.86rem;
+      line-height: 1.45;
+    }}
+    .banner {{
+      margin-top: 18px;
+      border-left: 6px solid var(--accent);
+      padding: 12px 16px;
+      background: #fff2f2;
+      border-radius: 12px;
+      color: #5e1111;
+      font-weight: 700;
+    }}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <h1>Offline AV Scan Summary</h1>
+      <p>Single-page operator view for removable media screening. Expand each engine below for raw log detail.</p>
+      <div class="status-line">
+        <span class="pill {STATUS_CLASS.get(overall, 'neutral')}">{html.escape(overall)}</span>
+        <span>Run ID: <strong>{html.escape(str(payload['run_id']))}</strong></span>
+        <span>Test mode: <strong>{html.escape(test_mode)}</strong></span>
+      </div>
+      <div class="summary-grid">
+        <div class="card"><div class="label">Engines</div><div class="value">{totals['engines']}</div></div>
+        <div class="card"><div class="label">Clean</div><div class="value">{totals['clean']}</div></div>
+        <div class="card"><div class="label">Blocked</div><div class="value">{totals['blocked']}</div></div>
+        <div class="card"><div class="label">Skipped</div><div class="value">{totals['skipped']}</div></div>
+      </div>
+      <div class="meta-grid">
+        <div class="card"><div class="label">Source Media</div><div>{html.escape(str(payload['source_path']))}</div></div>
+        <div class="card"><div class="label">Source Filesystem</div><div>{html.escape(str(payload['source_filesystem']))} ({html.escape(str(payload['source_label']))})</div></div>
+        <div class="card"><div class="label">Destination Media</div><div>{html.escape(str(payload['destination_path']))}</div></div>
+        <div class="card"><div class="label">Destination Filesystem</div><div>{html.escape(str(payload['destination_filesystem']))} ({html.escape(str(payload['destination_label']))})</div></div>
+        <div class="card"><div class="label">Started</div><div>{html.escape(str(payload['started_at']))}</div></div>
+        <div class="card"><div class="label">Finished</div><div>{html.escape(str(payload['finished_at']))}</div></div>
+      </div>
+      <div class="banner">Writable destination media should only be used when the overall status is <strong>approved</strong>.</div>
+    </section>
+    <section class="section">
+      <h2>Engine Results</h2>
+      {engines_html}
+    </section>
+  </div>
+</body>
+</html>
+"""
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--metadata", required=True)
+    parser.add_argument("--summary", required=True)
+    parser.add_argument("--json-out", required=True)
+    parser.add_argument("--html-out", required=True)
+    args = parser.parse_args()
+
+    metadata = parse_env(Path(args.metadata))
+    rows = parse_summary(Path(args.summary))
+    payload = build_payload(metadata, rows)
+
+    json_path = Path(args.json_out)
+    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    html_path = Path(args.html_out)
+    html_path.write_text(render_html(payload), encoding="utf-8")
+
+
+if __name__ == "__main__":
+    main()

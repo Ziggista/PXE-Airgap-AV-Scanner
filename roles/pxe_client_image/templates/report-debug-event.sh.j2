@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONFIG_FILE="/etc/av-pxe/client.env"
+OFFLINE_LOCK_FILE="/run/av/post-splash-network-disabled"
+
+if [[ -f "$CONFIG_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$CONFIG_FILE"
+fi
+
+if [[ "${PXE_CLIENT_TEST_MODE:-0}" != "1" ]]; then
+  exit 0
+fi
+
+if [[ -f "$OFFLINE_LOCK_FILE" && "${PXE_CLIENT_ALLOW_POST_SPLASH_DEBUG:-0}" != "1" ]]; then
+  exit 0
+fi
+
+BASE_URL="${PXE_CLIENT_DEBUG_REPORT_BASE_URL:-}"
+EVENT_NAME="${1:-event}"
+DETAIL="${2:-}"
+
+if [[ -z "$BASE_URL" ]]; then
+  exit 0
+fi
+
+HOSTNAME_VALUE="$(hostname)"
+TIMESTAMP="$(date -Iseconds)"
+PAYLOAD=$(printf '{"timestamp":"%s","hostname":"%s","event":"%s","detail":"%s"}' \
+  "$TIMESTAMP" \
+  "$HOSTNAME_VALUE" \
+  "$(printf '%s' "$EVENT_NAME" | sed 's/"/\\"/g')" \
+  "$(printf '%s' "$DETAIL" | sed 's/"/\\"/g')")
+
+curl -fsS -X POST \
+  -H "Content-Type: application/json" \
+  --data "$PAYLOAD" \
+  "$BASE_URL" \
+  >/dev/null || true

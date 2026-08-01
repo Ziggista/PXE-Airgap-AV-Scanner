@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export DEBIAN_FRONTEND=noninteractive
+APT_ARGS=(-y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
+
+SCANNER_USER="{{ pxe_client_username }}"
+ADMIN_USER="{{ pxe_client_admin_username }}"
+
+if ! id -u "$ADMIN_USER" >/dev/null 2>&1; then
+  groupadd -f "$ADMIN_USER"
+  useradd -m -s /bin/bash -g "$ADMIN_USER" -G sudo,adm "$ADMIN_USER"
+fi
+passwd -l "$ADMIN_USER" || true
+
+install -d -m 0700 -o "$ADMIN_USER" -g "$ADMIN_USER" "/home/$ADMIN_USER/.ssh"
+cat >"/home/$ADMIN_USER/.ssh/authorized_keys" <<'EOF'
+{% for key in pxe_client_test_ssh_public_keys %}
+{{ key }}
+{% endfor %}
+EOF
+chown "$ADMIN_USER:$ADMIN_USER" "/home/$ADMIN_USER/.ssh/authorized_keys"
+chmod 0600 "/home/$ADMIN_USER/.ssh/authorized_keys"
+
+install -d -m 0755 /etc/X11/sessions /usr/share/xsessions
+cat >/etc/X11/sessions/av-client-openbox.desktop <<'EOF'
+[Desktop Entry]
+Encoding=UTF-8
+Type=Application
+Name=AV Client Openbox
+Comment=Minimal PXE client session
+Exec=openbox-session
+EOF
+cp -f /etc/X11/sessions/av-client-openbox.desktop /usr/share/xsessions/av-client-openbox.desktop
+
+cat >/etc/sudoers.d/90-ziggi-py <<'EOF'
+{{ pxe_client_admin_username }} ALL=(ALL) NOPASSWD:ALL
+EOF
+chmod 0440 /etc/sudoers.d/90-ziggi-py
+
+cat >/etc/sudoers.d/91-av-scanner <<'EOF'
+{{ pxe_client_username }} ALL=(root) NOPASSWD:/usr/local/bin/mount-public-media.sh,/usr/local/bin/mount-approved-media.sh,/usr/local/bin/offline-scan.sh,/usr/local/bin/copy-approved-media.sh,/usr/local/bin/disable-network-access.sh
+EOF
+chmod 0440 /etc/sudoers.d/91-av-scanner
+
+install -d -m 0755 /mnt/public-media /mnt/approved-media /run/av-scan /var/log/av-pxe/scans /opt/av/definitions/clamav
+install -d -m 0755 /etc/skel
+install -d -m 0700 /etc/skel/.config /etc/skel/.local/state /etc/skel/.local/share/applications
+touch /etc/skel/.config/gnome-initial-setup-done
+
+install -d -m 0755 /etc/xdg/autostart
+install -d -m 0755 /etc/xdg/xdg-ubuntu/autostart
+cat >/etc/xdg/autostart/gnome-initial-setup-first-login.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Disable GNOME Initial Setup
+NoDisplay=true
+Hidden=true
+EOF
+
+cat >/etc/xdg/autostart/ubuntu-desktop-bootstrap_ubuntu-desktop-bootstrap.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Disable Ubuntu Desktop Bootstrap
+NoDisplay=true
+Hidden=true
+EOF
+
+cp -f /etc/xdg/autostart/ubuntu-desktop-bootstrap_ubuntu-desktop-bootstrap.desktop \
+  /etc/xdg/xdg-ubuntu/autostart/ubuntu-desktop-bootstrap_ubuntu-desktop-bootstrap.desktop
+
+cat >/etc/xdg/autostart/ubuntu-initial-setup-first-login.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Disable Ubuntu Initial Setup
+NoDisplay=true
+Hidden=true
+EOF
+
+cat >/etc/skel/.local/share/applications/gnome-initial-setup-first-login.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Disable GNOME Initial Setup
+NoDisplay=true
+Hidden=true
+EOF
+
+cat >/etc/skel/.local/share/applications/ubuntu-initial-setup-first-login.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Disable Ubuntu Initial Setup
+NoDisplay=true
+Hidden=true
+EOF
+
+cat >/etc/skel/.local/share/applications/ubuntu-desktop-bootstrap_ubuntu-desktop-bootstrap.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Disable Ubuntu Desktop Bootstrap
+NoDisplay=true
+Hidden=true
+EOF
+
+if dpkg -s gnome-initial-setup >/dev/null 2>&1; then
+  apt-get purge "${APT_ARGS[@]}" gnome-initial-setup || true
+fi
+if dpkg -s ibus-table >/dev/null 2>&1; then
+  apt-get purge "${APT_ARGS[@]}" ibus-table || true
+fi
+for package in {{ pxe_client_remove_packages | join(' ') }}; do
+  if dpkg -s "$package" >/dev/null 2>&1; then
+    apt-get purge "${APT_ARGS[@]}" "$package" || true
+  fi
+done
+apt-get autoremove "${APT_ARGS[@]}" --purge || true
+
+for snap_name in prompting-client thunderbird; do
+  if command -v snap >/dev/null 2>&1 && snap list "$snap_name" >/dev/null 2>&1; then
+    snap remove --purge "$snap_name" || true
+  fi
+done
+
+if [[ -f /etc/default/apport ]]; then
+  sed -i 's/^enabled=.*/enabled=0/' /etc/default/apport
+fi
+systemctl disable apport.service apport-autoreport.path whoopsie.service 2>/dev/null || true
+systemctl disable gdm.service gdm3.service lightdm.service nodm.service display-manager.service 2>/dev/null || true
+systemctl disable getty@tty1.service 2>/dev/null || true
+rm -f /etc/systemd/system/display-manager.service /etc/X11/default-display-manager
+rm -f /etc/systemd/system/getty.target.wants/getty@tty1.service
+
+rm -f \
+  /usr/share/applications/gnome-initial-setup-first-login.desktop \
+  /usr/share/applications/gnome-initial-setup.desktop \
+  /usr/share/applications/ubuntu-initial-setup-first-login.desktop \
+  /usr/share/applications/ubuntu-desktop-bootstrap_ubuntu-desktop-bootstrap.desktop \
+  /var/lib/snapd/desktop/applications/ubuntu-desktop-bootstrap_ubuntu-desktop-bootstrap.desktop \
+  /var/lib/snapd/desktop/applications/lightdm.desktop \
+  /var/lib/snapd/desktop/applications/prompting-client_prompting-client.desktop \
+  /var/lib/snapd/desktop/applications/thunderbird_thunderbird.desktop \
+  /usr/share/ubuntu/applications/gnome-initial-setup.desktop \
+  /usr/share/gdm/greeter/wayland-sessions/gnome-initial-setup.desktop \
+  /usr/share/xsessions/gnome-initial-setup.desktop \
+  /etc/xdg/autostart/gnome-initial-setup.desktop \
+  /etc/xdg/autostart/ubuntu-welcome.desktop \
+  /etc/xdg/xdg-ubuntu/autostart/ubuntu-desktop-bootstrap.desktop \
+  /etc/xdg/xdg-ubuntu/autostart/ubuntu-desktop-init.desktop \
+  /etc/xdg/xdg-ubuntu/autostart/ubuntu-desktop-bootstrap_ubuntu-desktop-bootstrap.desktop \
+  /usr/share/glib-2.0/schemas/90_ubuntu-settings.gschema.override
+
+rm -f \
+  /usr/share/applications/aisleriot.desktop \
+  /usr/share/applications/org.gnome.Cheese.desktop \
+  /usr/share/applications/org.gnome.Calendar.desktop \
+  /usr/share/applications/org.gnome.Contacts.desktop \
+  /usr/share/applications/org.gnome.Maps.desktop \
+  /usr/share/applications/org.gnome.Music.desktop \
+  /usr/share/applications/org.gnome.Nibbles.desktop \
+  /usr/share/applications/org.gnome.Rhythmbox3.desktop \
+  /usr/share/applications/org.gnome.Snapshot.desktop \
+  /usr/share/applications/org.gnome.Software.desktop \
+  /usr/share/applications/org.gnome.Totem.desktop \
+  /usr/share/applications/org.gnome.Yelp.desktop \
+  /usr/share/applications/libreoffice-*.desktop \
+  /usr/share/applications/remmina.desktop \
+  /usr/share/applications/simple-scan.desktop \
+  /usr/share/applications/transmission-gtk.desktop \
+  /usr/share/applications/usb-creator-gtk.desktop
+
+cat >/etc/dconf/profile/user <<'EOF'
+user-db:user
+system-db:local
+EOF
+
+install -d -m 0755 /etc/dconf/db/local.d
+cat >/etc/dconf/db/local.d/00-av-pxe <<'EOF'
+[org/gnome/shell]
+favorite-apps=['org.gnome.Nautilus.desktop']
+
+[org/gnome/desktop/session]
+session-name='openbox'
+EOF
+dconf update || true
+
+update-alternatives --set x-session-manager /usr/bin/openbox-session || true
+
+if [[ "{{ '1' if pxe_client_test_mode else '0' }}" == "1" ]]; then
+  ln -sf /lib/systemd/system/ssh.service /etc/systemd/system/multi-user.target.wants/ssh.service
+else
+  rm -f /etc/systemd/system/multi-user.target.wants/ssh.service || true
+fi
+
+if [[ "{{ '1' if pxe_client_test_mode else '0' }}" != "1" ]]; then
+  rm -f /etc/ssh/ssh_host_*
+fi
+truncate -s 0 /etc/machine-id

@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+import os
+import socket
+import subprocess
+import time
+import urllib.request
+from pathlib import Path
+
+
+CONFIG_FILE = Path("/etc/av-pxe/client.env")
+
+
+def load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        os.environ.setdefault(key, value)
+
+
+def run_command(command: list[str]) -> str:
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+    except Exception as exc:  # pragma: no cover - best effort runtime capture
+        return f"ERROR: {exc}"
+
+    output = completed.stdout.strip()
+    error = completed.stderr.strip()
+    pieces = []
+    if output:
+        pieces.append(output)
+    if error:
+        pieces.append(f"STDERR:\n{error}")
+    if completed.returncode != 0:
+        pieces.append(f"EXIT={completed.returncode}")
+    return "\n".join(pieces).strip()
+
+
+def main() -> int:
+    load_env_file(CONFIG_FILE)
+    if os.environ.get("PXE_CLIENT_TEST_MODE") != "1":
+        return 0
+    if os.environ.get("PXE_CLIENT_ALLOW_POST_SPLASH_DEBUG") != "1":
+        return 0
+
+    base_url = os.environ.get("PXE_CLIENT_DEBUG_REPORT_BASE_URL", "").strip()
+    if not base_url:
+        return 0
+
+    # Give casper and nodm time to create the live user and launch the session.
+    time.sleep(45)
+
+    payload = {
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "hostname": socket.gethostname(),
+        "event": "runtime-debug-snapshot",
+        "detail": "Captured runtime desktop state after kiosk session startup.",
+        "snapshot": {
+            "who": run_command(["who"]),
+            "loginctl": run_command(["loginctl", "list-sessions", "--no-legend"]),
+            "loginctl_scanner": run_command(["loginctl", "show-user", "{{ pxe_client_username }}"]),
+            "ps_initial_setup": run_command(
+                [
+                    "bash",
+                    "-lc",
+                    "ps -ef | egrep 'initial-setup|ubuntu|casper|gdm|lightdm|nodm|openbox|ibus|xinit|Xorg|av-kiosk' | grep -v egrep",
+                ]
+            ),
+            "xsession_files": run_command(
+                [
+                    "bash",
+                    "-lc",
+                    "ls -lah /usr/share/xsessions /etc/X11/sessions 2>/dev/null",
+                ]
+            ),
+            "accountsservice_scanner": run_command(
+                [
+                    "bash",
+                    "-lc",
+                    "sed -n '1,80p' /var/lib/AccountsService/users/{{ pxe_client_username }}",
+                ]
+            ),
+            "casper_config": run_command(
+                [
+                    "bash",
+                    "-lc",
+                    "sed -n '1,80p' /etc/casper.conf 2>/dev/null",
+                ]
+            ),
+            "journal_gdm": run_command(["journalctl", "-b", "-u", "gdm3", "-n", "200", "--no-pager"]),
+            "journal_lightdm": run_command(["journalctl", "-b", "-u", "lightdm", "-n", "200", "--no-pager"]),
+            "journal_nodm": run_command(["journalctl", "-b", "-u", "nodm", "-n", "200", "--no-pager"]),
+            "journal_av_kiosk_x": run_command(["journalctl", "-b", "-u", "av-kiosk-x.service", "-n", "200", "--no-pager"]),
+            "journal_definition_sync": run_command(["journalctl", "-b", "-u", "av-definition-sync.service", "-n", "100", "--no-pager"]),
+            "lightdm_config": run_command(
+                [
+                    "bash",
+                    "-lc",
+                    "sed -n '1,120p' /etc/lightdm/lightdm.conf.d/20-av-client-autologin.conf 2>/dev/null",
+                ]
+            ),
+            "nodm_config": run_command(
+                [
+                    "bash",
+                    "-lc",
+                    "sed -n '1,120p' /etc/default/nodm 2>/dev/null",
+                ]
+            ),
+            "journal_graphical_errors": run_command(
+                [
+                    "bash",
+                    "-lc",
+                    "journalctl -b --no-pager | egrep 'initial-setup|ubuntu|casper|gdm|lightdm|nodm|openbox|ibus|apport|whoopsie|xinit|Xorg|av-kiosk' | tail -n 300",
+                ]
+            ),
+            "xorg_log_tail": run_command(
+                [
+                    "bash",
+                    "-lc",
+                    "tail -n 200 /home/{{ pxe_client_username }}/.local/share/xorg/Xorg.0.log 2>/dev/null",
+                ]
+            ),
+            "session_log_tail": run_command(
+                [
+                    "bash",
+                    "-lc",
+                    "tail -n 200 /var/log/av-pxe/session.log 2>/dev/null",
+                ]
+            ),
+            "openbox_log_tail": run_command(
+                [
+                    "bash",
+                    "-lc",
+                    "tail -n 200 /var/log/av-pxe/openbox-autostart.log 2>/dev/null",
+                ]
+            ),
+            "banner_log_tail": run_command(
+                [
+                    "bash",
+                    "-lc",
+                    "tail -n 200 /var/log/av-pxe/banner.log 2>/dev/null",
+                ]
+            ),
+        },
+    }
+
+    data = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        base_url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20):
+            return 0
+    except Exception:
+        return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

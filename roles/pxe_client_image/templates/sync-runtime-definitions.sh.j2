@@ -3,24 +3,340 @@ set -euo pipefail
 
 STATUS_DIR="/run/av"
 STATUS_FILE="$STATUS_DIR/definition-sync.status"
-TARGET="/opt/av/definitions/clamav"
-BASE_URL="{{ pxe_client_runtime_definitions_base_url }}"
+METADATA_FILE="$STATUS_DIR/definition-sync.json"
+SOURCE="/opt/av/definitions/clamav"
+TARGET="/run/av/definitions/clamav"
+CONFIG_FILE="/etc/av-pxe/client.env"
 
 mkdir -p "$STATUS_DIR"
 mkdir -p "$TARGET"
 echo "running" > "$STATUS_FILE"
+/usr/local/bin/report-debug-event.sh definition-sync-started "Preparing bundled AV definitions from the boot image."
 
-fetched=0
+available=0
+rm -f "$TARGET"/main.cvd "$TARGET"/daily.cvd "$TARGET"/bytecode.cvd "$TARGET"/main.cld "$TARGET"/daily.cld "$TARGET"/bytecode.cld
 for file in main.cvd daily.cvd bytecode.cvd main.cld daily.cld bytecode.cld; do
-  if curl -fsSL "$BASE_URL/${file}" -o "$TARGET/${file}"; then
-    fetched=1
+  if [[ -f "$SOURCE/${file}" ]]; then
+    install -m 0644 "$SOURCE/${file}" "$TARGET/${file}"
+    available=1
   fi
 done
 
-if [[ "$fetched" -eq 0 ]]; then
+if [[ "$available" -eq 0 ]]; then
   echo "failed" > "$STATUS_FILE"
-  echo "Failed to fetch any runtime AV definitions from $BASE_URL" >&2
+  /usr/local/bin/report-debug-event.sh definition-sync-failed "No bundled AV definitions were found in $SOURCE"
+  echo "No bundled AV definitions were found in $SOURCE" >&2
   exit 1
 fi
 
+export TARGET METADATA_FILE
+export PXE_DEFINITION_PREFERRED_MAX_AGE_HOURS="{{ pxe_client_definitions_preferred_max_age_hours }}"
+export PXE_DEFINITION_FAIL_MAX_AGE_HOURS="{{ pxe_client_definitions_fail_max_age_hours }}"
+export PXE_YARA_RULES_PATH="{{ pxe_client_yara_rules_path }}"
+export PXE_YARA_RULES_METADATA_PATH="{{ pxe_client_yara_rules_metadata_path }}"
+export PXE_ENGINE_PROVIDERS_JSON='{{ pxe_client_engine_providers | to_json }}'
+export PXE_LICENSE_ACCEPTANCE_JSON='{{ license_acceptance | to_json }}'
+export PXE_ACTIVE_PROVIDER_ORDER_JSON='{{ pxe_client_active_provider_order | to_json }}'
+python3 <<'PY'
+import json
+import os
+import subprocess
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+target = Path(os.environ["TARGET"])
+metadata_file = Path(os.environ["METADATA_FILE"])
+yara_rules_path = Path(os.environ["PXE_YARA_RULES_PATH"])
+yara_rules_metadata_path = Path(os.environ["PXE_YARA_RULES_METADATA_PATH"])
+provider_config = json.loads(os.environ["PXE_ENGINE_PROVIDERS_JSON"])
+license_acceptance = json.loads(os.environ["PXE_LICENSE_ACCEPTANCE_JSON"])
+active_provider_order = json.loads(os.environ["PXE_ACTIVE_PROVIDER_ORDER_JSON"])
+preferred_hours = int(os.environ["PXE_DEFINITION_PREFERRED_MAX_AGE_HOURS"])
+fail_hours = int(os.environ["PXE_DEFINITION_FAIL_MAX_AGE_HOURS"])
+now_epoch = int(time.time())
+
+candidate_files = [
+    "main.cvd",
+    "daily.cvd",
+    "bytecode.cvd",
+    "main.cld",
+    "daily.cld",
+    "bytecode.cld",
+]
+reference_priority = [
+    "daily.cld",
+    "daily.cvd",
+    "bytecode.cld",
+    "bytecode.cvd",
+    "main.cld",
+    "main.cvd",
+]
+
+
+def parse_sigtool_info(path: Path):
+    result = subprocess.run(
+        ["sigtool", "--info", str(path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    info = {}
+    for line in result.stdout.splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        info[key.strip().lower()] = value.strip()
+    build_time = info.get("build time")
+    build_epoch = None
+    if build_time:
+        try:
+            build_epoch = int(datetime.strptime(build_time, "%d %b %Y %H:%M %z").timestamp())
+        except ValueError:
+            build_time = None
+    return {
+        "path": str(path),
+        "build_time": build_time,
+        "build_epoch": build_epoch,
+        "version": info.get("version"),
+        "signatures": info.get("signatures") or info.get("# of signatures"),
+        "functionality_level": info.get("functionality level"),
+        "builder": info.get("builder"),
+    }
+
+
+records = {}
+for name in candidate_files:
+    path = target / name
+    if path.exists():
+        records[name] = parse_sigtool_info(path)
+
+reference_name = next((name for name in reference_priority if name in records), None)
+reference = records.get(reference_name) if reference_name else None
+
+freshness_state = "unknown"
+freshness_message = "Definition freshness could not be determined from the staged ClamAV databases."
+age_seconds = None
+age_hours = None
+
+if reference and reference.get("build_epoch") is not None:
+    age_seconds = max(0, now_epoch - reference["build_epoch"])
+    age_hours = age_seconds / 3600.0
+    if age_hours <= preferred_hours:
+        freshness_state = "healthy"
+    elif age_hours <= fail_hours:
+        freshness_state = "warning"
+    else:
+        freshness_state = "fail"
+    freshness_message = (
+        f"Reference database {reference_name} was built at {reference['build_time']} "
+        f"and is {age_hours:.1f} hours old."
+    )
+
+
+def classify_age(age_value):
+    if age_value is None:
+        return "unknown"
+    if age_value <= preferred_hours:
+        return "healthy"
+    if age_value <= fail_hours:
+        return "warning"
+    return "fail"
+
+
+def iso_from_epoch(epoch_value):
+    if epoch_value is None:
+        return None
+    return datetime.fromtimestamp(epoch_value, timezone.utc).isoformat()
+
+
+def bundle_manifest_path(bundle_path):
+    if not bundle_path:
+        return None
+    return Path(bundle_path) / "bundle-manifest.json"
+
+
+def load_yara_timestamp():
+    sources = []
+    if yara_rules_metadata_path.exists():
+        try:
+            payload = json.loads(yara_rules_metadata_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            payload = {}
+        for key in ("source_updated_at_epoch", "updated_at_epoch", "built_at_epoch"):
+            value = payload.get(key)
+            if isinstance(value, (int, float)):
+                sources.append((int(value), f"metadata:{key}"))
+        for key in ("source_updated_at", "updated_at", "built_at", "generated_at"):
+            value = payload.get(key)
+            if not isinstance(value, str):
+                continue
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                sources.append((int(parsed.timestamp()), f"metadata:{key}"))
+            except ValueError:
+                continue
+    if yara_rules_path.exists():
+        sources.append((int(yara_rules_path.stat().st_mtime), "file-mtime"))
+    if not sources:
+        return None, None
+    return sorted(sources, key=lambda item: item[0], reverse=True)[0]
+
+
+clamav_engine = {
+    "display_name": provider_config.get("clamav", {}).get("display_name", "ClamAV"),
+    "required": True,
+    "kind": "signature-db",
+    "enabled": provider_config.get("clamav", {}).get("enabled", True),
+    "status": provider_config.get("clamav", {}).get("status", "installed"),
+    "bundle_path": provider_config.get("clamav", {}).get("bundle_path"),
+    "notes": provider_config.get("clamav", {}).get("notes"),
+    "state": freshness_state,
+    "message": freshness_message,
+    "reference_file": reference_name,
+    "reference_build_time": reference.get("build_time") if reference else None,
+    "reference_build_epoch": reference.get("build_epoch") if reference else None,
+    "reference_age_seconds": age_seconds,
+    "reference_age_hours": age_hours,
+    "files": records,
+}
+
+yara_epoch, yara_source = load_yara_timestamp()
+yara_age_seconds = None if yara_epoch is None else max(0, now_epoch - yara_epoch)
+yara_age_hours = None if yara_age_seconds is None else yara_age_seconds / 3600.0
+yara_state = "unavailable" if yara_epoch is None else classify_age(yara_age_hours)
+if yara_epoch is None:
+    yara_message = f"No bundled YARA rules were found at {yara_rules_path}."
+else:
+    yara_message = (
+        f"YARA rules reference timestamp came from {yara_source} at "
+        f"{iso_from_epoch(yara_epoch)} and is {yara_age_hours:.1f} hours old."
+    )
+
+yara_engine = {
+    "display_name": provider_config.get("yara", {}).get("display_name", "YARA"),
+    "required": False,
+    "kind": "rule-bundle",
+    "enabled": provider_config.get("yara", {}).get("enabled", True),
+    "status": provider_config.get("yara", {}).get("status", "installed"),
+    "bundle_path": provider_config.get("yara", {}).get("bundle_path"),
+    "notes": provider_config.get("yara", {}).get("notes"),
+    "state": yara_state,
+    "message": yara_message,
+    "reference_file": str(yara_rules_path),
+    "reference_build_time": iso_from_epoch(yara_epoch),
+    "reference_build_epoch": yara_epoch,
+    "reference_age_seconds": yara_age_seconds,
+    "reference_age_hours": yara_age_hours,
+    "timestamp_source": yara_source,
+    "metadata_path": str(yara_rules_metadata_path),
+}
+
+engines = {
+    "clamav": clamav_engine,
+    "yara": yara_engine,
+}
+
+for provider_key in ("defender", "sophos", "bitdefender"):
+    provider = provider_config.get(provider_key, {})
+    acceptance_key = {
+        "defender": "microsoft_defender",
+        "sophos": "sophos",
+        "bitdefender": "bitdefender",
+    }[provider_key]
+    acceptance = license_acceptance.get(acceptance_key, {})
+    accepted = bool(acceptance.get("accepted", False))
+    manifest_path = bundle_manifest_path(provider.get("bundle_path"))
+    bundle_present = bool(manifest_path and manifest_path.exists())
+    status = "awaiting_acceptance"
+    if accepted:
+        status = "bundle_staged" if bundle_present else "awaiting_bundle"
+    cli_hint = provider.get("cli_hint")
+    bundle_path = provider.get("bundle_path")
+    notes = provider.get("notes")
+    accepted_by = acceptance.get("accepted_by") or ""
+    accepted_at = acceptance.get("accepted_at") or ""
+    message_parts = []
+    if status == "awaiting_acceptance":
+        message_parts.append("Commercial license terms have not been explicitly accepted in inventory yet.")
+    elif status == "awaiting_bundle":
+        message_parts.append("Licensed bundle not present in the PXE image.")
+    elif status == "bundle_staged":
+        message_parts.append("Licensed bundle manifest is staged in the PXE image and can be consumed by the scan runner.")
+    elif status == "unconfigured":
+        message_parts.append("Bundle is present but the engine is not configured yet.")
+    else:
+        message_parts.append(f"Provider status is {status}.")
+    if bundle_path:
+        message_parts.append(f"Expected bundle path: {bundle_path}.")
+    if cli_hint:
+        message_parts.append(f"CLI hint: {cli_hint}.")
+    if notes:
+        message_parts.append(notes)
+    if accepted:
+        message_parts.append(
+            f"Acceptance recorded by {accepted_by or 'an authorized operator'}"
+            + (f" on {accepted_at}." if accepted_at else ".")
+        )
+    engines[provider_key] = {
+        "display_name": provider.get("display_name", provider_key),
+        "required": bool(provider.get("required", False)),
+        "kind": provider.get("kind", "commercial-agent"),
+        "enabled": bool(provider.get("enabled", False)),
+        "status": status,
+        "accepted": accepted,
+        "accepted_by": accepted_by,
+        "accepted_at": accepted_at,
+        "bundle_present": bundle_present,
+        "manifest_path": str(manifest_path) if manifest_path else None,
+        "bundle_path": bundle_path,
+        "cli_hint": cli_hint,
+        "notes": notes,
+        "state": "unavailable" if status in ("awaiting_acceptance", "awaiting_bundle") else "unknown",
+        "message": " ".join(message_parts),
+        "reference_file": None,
+        "reference_build_time": None,
+        "reference_build_epoch": None,
+        "reference_age_seconds": None,
+        "reference_age_hours": None,
+    }
+
+overall_state = "healthy"
+required_states = [engine["state"] for engine in engines.values() if engine.get("required")]
+if any(state == "fail" for state in required_states):
+    overall_state = "fail"
+elif any(state == "warning" for state in required_states):
+    overall_state = "warning"
+elif any(state not in ("healthy",) for state in required_states):
+    overall_state = "unknown"
+
+payload = {
+    "generated_at": datetime.now(timezone.utc).isoformat(),
+    "preferred_max_age_hours": preferred_hours,
+    "fail_max_age_hours": fail_hours,
+    "overall_state": overall_state,
+    "provider_order": active_provider_order,
+    "reference_file": reference_name,
+    "reference_build_time": reference.get("build_time") if reference else None,
+    "reference_build_epoch": reference.get("build_epoch") if reference else None,
+    "reference_age_seconds": age_seconds,
+    "reference_age_hours": age_hours,
+    "freshness_state": freshness_state,
+    "freshness_message": freshness_message,
+    "engines": engines,
+    "files": records,
+}
+metadata_file.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+
 echo "ready" > "$STATUS_FILE"
+/usr/local/bin/report-debug-event.sh definition-sync-ready "Bundled AV definitions were staged into RAM at $TARGET"
+if python3 - <<'PY'
+import json
+from pathlib import Path
+data = json.loads(Path("/run/av/definition-sync.json").read_text(encoding="utf-8"))
+raise SystemExit(0 if data.get("overall_state") == "fail" else 1)
+PY
+then
+  /usr/local/bin/report-debug-event.sh definition-sync-stale "A required bundled engine definition set exceeded the maximum allowed age threshold."
+fi

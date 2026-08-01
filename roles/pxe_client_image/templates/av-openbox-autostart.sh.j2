@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+LOG_DIR="/var/log/av-pxe"
+LOG_FILE="$LOG_DIR/openbox-autostart.log"
+BANNER_READY_FILE="/run/av/banner-ready"
+
+mkdir -p "$LOG_DIR" /run/av
+
+{
+  echo "[$(date -Iseconds)] openbox autostart begin"
+
+  if [[ -f /etc/av-pxe/client.env ]]; then
+    # shellcheck disable=SC1090
+    source /etc/av-pxe/client.env
+  fi
+
+  rm -f "$BANNER_READY_FILE"
+
+  xsetroot -solid "#101010" 2>/dev/null || true
+
+  /usr/local/bin/report-debug-event.sh xsession-started "Openbox autostart started for the PXE client." || true
+
+  /usr/local/bin/av-network-banner.py >>"$LOG_FILE" 2>&1 &
+  banner_pid=$!
+  echo "[$(date -Iseconds)] launched banner pid=$banner_pid"
+
+  for _ in $(seq 1 30); do
+    if [[ -f "$BANNER_READY_FILE" ]]; then
+      echo "[$(date -Iseconds)] banner reported ready"
+      /usr/local/bin/report-debug-event.sh splash-ready "The offline banner reached GTK and reported readiness." || true
+      if [[ "${PXE_CLIENT_DISABLE_NETWORK_AT_SPLASH:-0}" == "1" ]]; then
+        if [[ "${PXE_CLIENT_ALLOW_POST_SPLASH_DEBUG:-0}" == "1" ]]; then
+          echo "[$(date -Iseconds)] preserving network because post-splash debug is enabled"
+          /usr/local/bin/report-debug-event.sh splash-debug-hold "Keeping network online for debug-enabled validation boot." || true
+        else
+          sudo /usr/local/bin/disable-network-access.sh >>"$LOG_FILE" 2>&1 || true
+        fi
+      fi
+      exit 0
+    fi
+    if ! kill -0 "$banner_pid" 2>/dev/null; then
+      echo "[$(date -Iseconds)] banner exited before readiness"
+      /usr/local/bin/report-debug-event.sh splash-failed "The offline banner exited before signaling readiness." || true
+      exit 0
+    fi
+    sleep 1
+  done
+
+  echo "[$(date -Iseconds)] banner readiness timed out"
+  /usr/local/bin/report-debug-event.sh splash-timeout "The offline banner did not report readiness within 30 seconds." || true
+} >>"$LOG_FILE" 2>&1

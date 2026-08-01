@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REQUESTED_SOURCE_PATH="${1:-}"
+DESTINATION_PATH="${2:-/mnt/approved-media}"
+APPROVAL_DIR="/run/av-scan"
+APPROVAL_FILE="$APPROVAL_DIR/approved"
+LATEST_RUN_FILE="$APPROVAL_DIR/latest-run.env"
+DESTINATION_MEDIA_METADATA="$APPROVAL_DIR/destination-media.env"
+
+if [[ ! -f "$APPROVAL_FILE" ]]; then
+  echo "Writable destination media is blocked until offline scans complete successfully." >&2
+  exit 1
+fi
+
+if [[ ! -f "$LATEST_RUN_FILE" ]]; then
+  echo "No approved scan context was found. Run offline-scan.sh first." >&2
+  exit 1
+fi
+
+# shellcheck disable=SC1090
+source "$LATEST_RUN_FILE"
+
+SOURCE_PATH="${REQUESTED_SOURCE_PATH:-${SOURCE_PATH:-}}"
+
+if [[ -z "${SOURCE_PATH:-}" ]]; then
+  echo "Source path is unknown. Pass it explicitly to copy-approved-media.sh." >&2
+  exit 1
+fi
+
+if ! mountpoint -q "$DESTINATION_PATH"; then
+  echo "Destination path $DESTINATION_PATH is not mounted. Run mount-approved-media.sh first." >&2
+  exit 1
+fi
+
+DESTINATION_FILESYSTEM="unknown"
+DESTINATION_DEVICE="unknown"
+DESTINATION_LABEL="unknown"
+if [[ -f "$DESTINATION_MEDIA_METADATA" ]]; then
+  # shellcheck disable=SC1090
+  source "$DESTINATION_MEDIA_METADATA"
+  DESTINATION_FILESYSTEM="${FILESYSTEM:-unknown}"
+  DESTINATION_DEVICE="${DEVICE:-unknown}"
+  DESTINATION_LABEL="${LABEL:-unknown}"
+fi
+
+python3 - <<'PY' "$METADATA_FILE" "$DESTINATION_PATH" "$DESTINATION_FILESYSTEM" "$DESTINATION_DEVICE" "$DESTINATION_LABEL"
+from pathlib import Path
+import sys
+
+metadata_file = Path(sys.argv[1])
+destination_path = sys.argv[2]
+destination_filesystem = sys.argv[3]
+destination_device = sys.argv[4]
+destination_label = sys.argv[5]
+
+lines = metadata_file.read_text(encoding="utf-8").splitlines()
+updates = {
+    "DESTINATION_PATH": destination_path,
+    "DESTINATION_FILESYSTEM": destination_filesystem,
+    "DESTINATION_DEVICE": destination_device,
+    "DESTINATION_LABEL": destination_label,
+}
+written = set()
+result = []
+for line in lines:
+    if "=" not in line:
+        result.append(line)
+        continue
+    key, _value = line.split("=", 1)
+    if key in updates:
+        result.append(f"{key}={updates[key]}")
+        written.add(key)
+    else:
+        result.append(line)
+for key, value in updates.items():
+    if key not in written:
+        result.append(f"{key}={value}")
+metadata_file.write_text("\n".join(result) + "\n", encoding="utf-8")
+PY
+
+/usr/local/bin/generate-scan-report.py \
+  --metadata "$METADATA_FILE" \
+  --summary "$SUMMARY_FILE" \
+  --json-out "$REPORT_JSON" \
+  --html-out "$REPORT_HTML"
+
+REPORT_BUNDLE_DIR="$DESTINATION_PATH/AV_SCAN_REPORTS/$RUN_ID"
+rsync -a --delete "$SOURCE_PATH"/ "$DESTINATION_PATH"/
+mkdir -p "$REPORT_BUNDLE_DIR"
+cp -a "$RUN_DIR"/. "$REPORT_BUNDLE_DIR"/
+
+echo "Copied sanitized content to $DESTINATION_PATH"
+echo "Copied report bundle to $REPORT_BUNDLE_DIR"

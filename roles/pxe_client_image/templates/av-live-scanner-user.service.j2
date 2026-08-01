@@ -1,0 +1,14 @@
+[Unit]
+Description=Ensure live scanner user exists before kiosk login
+DefaultDependencies=no
+After=local-fs.target systemd-sysusers.service
+Before=display-manager.service nodm.service
+Wants=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ensure-live-scanner-user.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

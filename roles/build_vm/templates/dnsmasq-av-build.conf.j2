@@ -1,7 +1,13 @@
 port=0
 log-dhcp
-dhcp-boot=pxelinux.0
 dhcp-range={{ pxe_server_dhcp_range_start }},{{ pxe_server_dhcp_range_end }},{{ pxe_server_dhcp_lease }}
+dhcp-match=set:bios,option:client-arch,0
+dhcp-match=set:efi64,option:client-arch,7
+dhcp-match=set:efi64,option:client-arch,9
+dhcp-userclass=set:ipxe,iPXE
+dhcp-boot=tag:!ipxe,tag:bios,undionly.kpxe
+dhcp-boot=tag:!ipxe,tag:efi64,snponly.efi
+dhcp-boot=tag:ipxe,boot.ipxe
 {% if pxe_server_interface %}
 interface={{ pxe_server_interface }}
 bind-interfaces

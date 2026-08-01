@@ -11,9 +11,14 @@ This workspace prepares a PXE-booted Ubuntu live client that:
 
 ## Main paths
 
-- Live-build root: `{{ pxe_client_livebuild_root }}`
+- Upstream desktop ISO: `{{ pxe_client_upstream_iso }}`
+- Overlay root: `{{ pxe_client_overlay_root }}`
+- Remaster workspace: `{{ pxe_client_remaster_root }}`
 - Output helpers: `{{ pxe_client_output_dir }}`
 - Publish target: `{{ pxe_client_publish_dir }}`
+- Published client ISO: `{{ pxe_client_output_iso }}`
+- SquashFS profile: `{{ pxe_client_squashfs_compressor }}` level `{{ pxe_client_squashfs_compression_level }}` with `{{ pxe_client_squashfs_processors }}` workers
+- Live source squashfs: `{{ pxe_client_remaster_source_squashfs }}`
 
 ## Build sequence
 
@@ -29,15 +34,17 @@ This workspace prepares a PXE-booted Ubuntu live client that:
 
    `ansible-playbook playbooks/sync-pxe-definitions.yml`
 
-   The PXE client downloads current definitions from the PXE server during boot, before the operator disconnects the network.
+   This refreshes the definitions that are baked into the next PXE client publish. The live client no longer downloads signatures during boot.
 
-4. If manual troubleshooting is needed, sync ClamAV definitions into the baked image workspace:
+4. If manual troubleshooting is needed, sync ClamAV definitions into the baked overlay:
 
    `sudo {{ pxe_client_output_dir }}/sync-clamav-from-proxy.sh`
 
-5. Build the live image:
+5. Remaster the known-good Ubuntu Desktop ISO:
 
    `sudo {{ pxe_client_output_dir }}/build-pxe-client-image.sh`
+
+   The remaster script now unmounts chroot bind mounts before SquashFS creation and uses a faster compression profile for iterative lab builds.
 
 6. Publish PXE assets:
 
@@ -46,7 +53,12 @@ This workspace prepares a PXE-booted Ubuntu live client that:
 ## Session behavior
 
 - Autologin user: `{{ pxe_client_username }}`
-- Before the desktop is considered ready, `av-definition-sync.service` pulls current ClamAV definitions from `{{ pxe_client_runtime_definitions_base_url }}`
+- Test/admin SSH user: `{{ pxe_client_admin_username }}`
+- Before the desktop is considered ready, `av-definition-sync.service` stages the bundled ClamAV definitions from the boot image into `/run/av/definitions/clamav`
+- The current production scan path is intentionally limited to `ClamAV` and the bundled `YARA` rule set. Commercial engine placeholders remain out of the operator path until real licensed bundles are staged.
+- The client now PXE boots with `netboot=url` and `toram`, so the live media is copied into RAM instead of keeping the root filesystem on NFS
+- The kiosk session attempts to shut down all non-loopback networking before the red splash is shown
+- The remaster process prunes Ubuntu installer pools and unused `casper` variants from the published ISO so the `toram` download fits into lab RAM budgets
 - The login session launches `/usr/local/bin/av-network-banner.py`
 - Source media should be mounted with:
 
@@ -56,4 +68,35 @@ This workspace prepares a PXE-booted Ubuntu live client that:
 
   `sudo /usr/local/bin/offline-scan.sh /mnt/public-media /mnt/approved-media`
 
+- After an approved scan, mount the writable destination media and copy with:
+
+  `sudo /usr/local/bin/mount-approved-media.sh /dev/sdY1 /mnt/approved-media`
+  `sudo /usr/local/bin/copy-approved-media.sh /mnt/public-media /mnt/approved-media`
+
+- Each scan creates:
+
+  - a single-page HTML summary at `/var/log/av-pxe/scans/latest/index.html`
+  - a machine-readable JSON summary at `/var/log/av-pxe/scans/latest/summary.json`
+  - per-engine raw logs under `/var/log/av-pxe/scans/latest/engines/`
+
+- YARA baseline assets are baked into the image at:
+
+  - `{{ pxe_client_yara_rules_path }}`
+  - `{{ pxe_client_yara_rules_metadata_path }}`
+
 - Destination media remains blocked until scans create the approval marker.
+
+## Test mode
+
+- `pxe_client_test_mode: true` acts as the development `-test` build flag.
+- In test mode the client enables `sshd` for the `{{ pxe_client_admin_username }}` user and is allowed to POST early boot and definition-staging events back to `{{ pxe_client_debug_report_base_url }}`.
+- Once the kiosk splash appears, post-splash debug callbacks are disabled unless `pxe_client_allow_post_splash_debug: true` is set.
+- Set `pxe_client_test_mode: false` for the production airgapped build so those debug call-backs are omitted.
+
+## Daily rebuild policy
+
+- Rebuild the client ISO only when desktop packages, scripts, or policy files change.
+- Refresh AV definitions daily with `playbooks/sync-pxe-definitions.yml`.
+- The live client uses the definitions already baked into the published image and stages them into RAM during boot.
+- The disposable target state is a RAM-resident client: scan, export approved output, then power off the machine.
+- For a production wipe cycle, booting a separate memory-test or RAM-scrub profile after shutdown should be treated as a PXE host workflow concern rather than an in-guest action.

@@ -1,0 +1,27 @@
+[Unit]
+Description=Start the PXE AV kiosk X session on tty1
+After=av-live-scanner-user.service systemd-user-sessions.service
+Wants=av-live-scanner-user.service
+Conflicts=getty@tty1.service
+
+[Service]
+User={{ pxe_client_username }}
+Group={{ pxe_client_username }}
+WorkingDirectory=/home/{{ pxe_client_username }}
+Environment=HOME=/home/{{ pxe_client_username }}
+Environment=USER={{ pxe_client_username }}
+Environment=LOGNAME={{ pxe_client_username }}
+PAMName=login
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=no
+StandardInput=tty
+StandardOutput=journal+console
+StandardError=journal+console
+ExecStart=/usr/bin/xinit /usr/local/bin/start-kiosk-x-client.sh -- :0 vt1 -nolisten tcp
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

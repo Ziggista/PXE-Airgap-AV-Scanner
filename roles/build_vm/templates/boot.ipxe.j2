@@ -1,0 +1,14 @@
+#!ipxe
+
+set boot_url http://{{ pxe_server_boot_ip }}
+
+echo Booting PXE profile from ${boot_url}
+kernel ${boot_url}/{{ pxe_server_boot_kernel_path }}
+{% if pxe_server_boot_method == "iso-url" %}
+initrd ${boot_url}/{{ pxe_server_boot_initrd_path }}
+imgargs vmlinuz {{ pxe_server_boot_append }}
+{% else %}
+initrd --name initrd ${boot_url}/{{ pxe_server_boot_initrd_path }}
+imgargs vmlinuz initrd=initrd {{ pxe_server_boot_append }}
+{% endif %}
+boot

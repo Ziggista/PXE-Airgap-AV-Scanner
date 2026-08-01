@@ -1,0 +1,11 @@
+[Unit]
+Description=Report PXE client boot progress when test mode is enabled
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/report-debug-event.sh boot-started "PXE client reached systemd userspace"
+
+[Install]
+WantedBy=multi-user.target

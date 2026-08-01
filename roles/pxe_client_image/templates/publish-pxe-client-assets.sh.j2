@@ -1,18 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WORKSPACE="{{ pxe_client_livebuild_root }}"
+EXTRACT_ROOT="{{ pxe_client_remaster_extract_root }}"
 PUBLISH="{{ pxe_client_publish_dir }}"
 TFTP_PUBLISH="{{ pxe_server_tftp_client_publish_dir }}"
-CASPER_DIR="$WORKSPACE/binary/casper"
+ROOTFS_PUBLISH="$PUBLISH/rootfs"
+OUTPUT_ISO="{{ pxe_client_output_iso }}"
 
 mkdir -p "$PUBLISH"
 mkdir -p "$TFTP_PUBLISH"
-cp -f "$(find "$CASPER_DIR" -maxdepth 1 -name 'vmlinuz-*' | head -n 1)" "$PUBLISH/vmlinuz"
-cp -f "$(find "$CASPER_DIR" -maxdepth 1 -name 'initrd.img-*' | head -n 1)" "$PUBLISH/initrd"
-cp -f "$CASPER_DIR/filesystem.squashfs" "$PUBLISH/filesystem.squashfs"
+mkdir -p "$ROOTFS_PUBLISH"
+rsync -a --delete "$EXTRACT_ROOT"/ "$ROOTFS_PUBLISH"/
+cp -f "$EXTRACT_ROOT/casper/vmlinuz" "$PUBLISH/vmlinuz"
+cp -f "$EXTRACT_ROOT/casper/initrd" "$PUBLISH/initrd"
 cp -f "$PUBLISH/vmlinuz" "$TFTP_PUBLISH/vmlinuz"
 cp -f "$PUBLISH/initrd" "$TFTP_PUBLISH/initrd"
+chmod 0644 "$PUBLISH/vmlinuz" "$PUBLISH/initrd" "$TFTP_PUBLISH/vmlinuz" "$TFTP_PUBLISH/initrd" "$OUTPUT_ISO"
 
-echo "Published PXE client assets into $PUBLISH"
+echo "Published PXE client ISO at $OUTPUT_ISO"
+echo "Published PXE client kernel/initrd into $PUBLISH"
+echo "Published PXE client live root into $ROOTFS_PUBLISH"
 echo "Published PXE TFTP boot files into $TFTP_PUBLISH"

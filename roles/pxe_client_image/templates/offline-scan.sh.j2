@@ -4,16 +4,253 @@ set -euo pipefail
 SOURCE_PATH="${1:-/mnt/source-media}"
 DESTINATION_PATH="${2:-/mnt/clean-output}"
 APPROVAL_DIR="/run/av-scan"
-CLAM_DB="/opt/av/definitions/clamav"
+REPORT_ROOT="/var/log/av-pxe/scans"
+LATEST_LINK="$REPORT_ROOT/latest"
+CLAM_DB="/run/av/definitions/clamav"
+YARA_RULES="/opt/av/rules/offline_rules.yar"
+STAGED_ENGINE_RUNNER="/usr/local/bin/run-staged-engine.py"
+RUN_ID="$(date +%Y%m%dT%H%M%S)"
+RUN_DIR="$REPORT_ROOT/$RUN_ID"
+ENGINE_DIR="$RUN_DIR/engines"
+METADATA_FILE="$RUN_DIR/metadata.env"
+SUMMARY_FILE="$RUN_DIR/summary.tsv"
+REPORT_HTML="$RUN_DIR/index.html"
+REPORT_JSON="$RUN_DIR/summary.json"
+APPROVAL_FILE="$APPROVAL_DIR/approved"
+LATEST_RUN_FILE="$APPROVAL_DIR/latest-run.env"
+DEFINITION_METADATA_JSON="/run/av/definition-sync.json"
+SOURCE_MEDIA_METADATA="$APPROVAL_DIR/source-media.env"
+DESTINATION_MEDIA_METADATA="$APPROVAL_DIR/destination-media.env"
 
-mkdir -p "$DESTINATION_PATH"
-mkdir -p "$APPROVAL_DIR"
-rm -f "$APPROVAL_DIR/approved"
+mkdir -p "$DESTINATION_PATH" "$APPROVAL_DIR" "$REPORT_ROOT" "$ENGINE_DIR"
+rm -f "$APPROVAL_FILE"
 
-clamscan --recursive --infected --no-summary --database "$CLAM_DB" "$SOURCE_PATH"
-if [[ -f /opt/av/rules/offline_rules.yar ]]; then
-  yara --recursive /opt/av/rules/offline_rules.yar "$SOURCE_PATH"
+TEST_MODE="0"
+if [[ -f /etc/av-pxe/client.env ]]; then
+  # shellcheck disable=SC1090
+  source /etc/av-pxe/client.env
+  TEST_MODE="${PXE_CLIENT_TEST_MODE:-0}"
 fi
 
-touch "$APPROVAL_DIR/approved"
-rsync -a --delete "$SOURCE_PATH"/ "$DESTINATION_PATH"/
+STARTED_AT="$(date -Iseconds)"
+SOURCE_FILESYSTEM="unknown"
+SOURCE_DEVICE="unknown"
+SOURCE_LABEL="unknown"
+DESTINATION_FILESYSTEM="unknown"
+DESTINATION_DEVICE="unknown"
+DESTINATION_LABEL="unknown"
+
+if [[ -f "$SOURCE_MEDIA_METADATA" ]]; then
+  # shellcheck disable=SC1090
+  source "$SOURCE_MEDIA_METADATA"
+  SOURCE_FILESYSTEM="${FILESYSTEM:-unknown}"
+  SOURCE_DEVICE="${DEVICE:-unknown}"
+  SOURCE_LABEL="${LABEL:-unknown}"
+fi
+
+if [[ -f "$DESTINATION_MEDIA_METADATA" ]]; then
+  # shellcheck disable=SC1090
+  source "$DESTINATION_MEDIA_METADATA"
+  DESTINATION_FILESYSTEM="${FILESYSTEM:-unknown}"
+  DESTINATION_DEVICE="${DEVICE:-unknown}"
+  DESTINATION_LABEL="${LABEL:-unknown}"
+fi
+
+DEFINITION_FRESHNESS_STATE="unknown"
+DEFINITION_OVERALL_STATE="unknown"
+DEFINITION_REFERENCE_FILE="unknown"
+DEFINITION_REFERENCE_BUILD_TIME="unknown"
+DEFINITION_REFERENCE_AGE_HOURS="unknown"
+YARA_FRESHNESS_STATE="unknown"
+YARA_REFERENCE_BUILD_TIME="unknown"
+YARA_REFERENCE_AGE_HOURS="unknown"
+if [[ -f "$DEFINITION_METADATA_JSON" ]]; then
+  readarray -t definition_meta < <(
+    python3 - <<'PY'
+import json
+from pathlib import Path
+data = json.loads(Path("/run/av/definition-sync.json").read_text(encoding="utf-8"))
+clamav = data.get("engines", {}).get("clamav", {})
+yara = data.get("engines", {}).get("yara", {})
+print(data.get("overall_state", "unknown"))
+print(clamav.get("state", data.get("freshness_state", "unknown")))
+print(clamav.get("reference_file") or data.get("reference_file") or "unknown")
+print(clamav.get("reference_build_time") or data.get("reference_build_time") or "unknown")
+age = clamav.get("reference_age_hours", data.get("reference_age_hours"))
+print("unknown" if age is None else f"{age:.1f}")
+print(yara.get("state", "unknown"))
+print(yara.get("reference_build_time") or "unknown")
+yara_age = yara.get("reference_age_hours")
+print("unknown" if yara_age is None else f"{yara_age:.1f}")
+PY
+  )
+  DEFINITION_OVERALL_STATE="${definition_meta[0]:-unknown}"
+  DEFINITION_FRESHNESS_STATE="${definition_meta[1]:-unknown}"
+  DEFINITION_REFERENCE_FILE="${definition_meta[2]:-unknown}"
+  DEFINITION_REFERENCE_BUILD_TIME="${definition_meta[3]:-unknown}"
+  DEFINITION_REFERENCE_AGE_HOURS="${definition_meta[4]:-unknown}"
+  YARA_FRESHNESS_STATE="${definition_meta[5]:-unknown}"
+  YARA_REFERENCE_BUILD_TIME="${definition_meta[6]:-unknown}"
+  YARA_REFERENCE_AGE_HOURS="${definition_meta[7]:-unknown}"
+fi
+
+cat > "$METADATA_FILE" <<EOF
+RUN_ID=$RUN_ID
+STARTED_AT=$STARTED_AT
+SOURCE_PATH=$SOURCE_PATH
+DESTINATION_PATH=$DESTINATION_PATH
+SOURCE_FILESYSTEM=$SOURCE_FILESYSTEM
+SOURCE_DEVICE=$SOURCE_DEVICE
+SOURCE_LABEL=$SOURCE_LABEL
+DESTINATION_FILESYSTEM=$DESTINATION_FILESYSTEM
+DESTINATION_DEVICE=$DESTINATION_DEVICE
+DESTINATION_LABEL=$DESTINATION_LABEL
+TEST_MODE=$TEST_MODE
+DEFINITION_OVERALL_STATE=$DEFINITION_OVERALL_STATE
+DEFINITION_FRESHNESS_STATE=$DEFINITION_FRESHNESS_STATE
+DEFINITION_REFERENCE_FILE=$DEFINITION_REFERENCE_FILE
+DEFINITION_REFERENCE_BUILD_TIME=$DEFINITION_REFERENCE_BUILD_TIME
+DEFINITION_REFERENCE_AGE_HOURS=$DEFINITION_REFERENCE_AGE_HOURS
+YARA_FRESHNESS_STATE=$YARA_FRESHNESS_STATE
+YARA_REFERENCE_BUILD_TIME=$YARA_REFERENCE_BUILD_TIME
+YARA_REFERENCE_AGE_HOURS=$YARA_REFERENCE_AGE_HOURS
+EOF
+
+printf "engine_id\tdisplay_name\tstatus\texit_code\tdetections\tlog_file\n" > "$SUMMARY_FILE"
+
+/usr/local/bin/report-debug-event.sh scan-started "Offline scan started for $SOURCE_PATH"
+
+if [[ "$DEFINITION_OVERALL_STATE" == "fail" ]]; then
+  /usr/local/bin/report-debug-event.sh scan-blocked "Offline scan blocked because bundled definitions are older than the allowed age threshold."
+  echo "Bundled definitions are stale (${DEFINITION_REFERENCE_FILE} built ${DEFINITION_REFERENCE_BUILD_TIME}, age ${DEFINITION_REFERENCE_AGE_HOURS}h). Rebuild the PXE client image before scanning." >&2
+  exit 1
+fi
+
+record_engine() {
+  local engine_id="$1"
+  local display_name="$2"
+  local status="$3"
+  local exit_code="$4"
+  local detections="$5"
+  local log_file="$6"
+  printf "%s\t%s\t%s\t%s\t%s\t%s\n" \
+    "$engine_id" "$display_name" "$status" "$exit_code" "$detections" "$log_file" >> "$SUMMARY_FILE"
+}
+
+run_clamav() {
+  local log_file="$ENGINE_DIR/clamav.log"
+  local rc=0
+  local status="clean"
+  local detections=0
+
+  if clamscan --recursive --infected --database "$CLAM_DB" "$SOURCE_PATH" >"$log_file" 2>&1; then
+    rc=0
+    status="clean"
+  else
+    rc=$?
+    if [[ "$rc" -eq 1 ]]; then
+      status="detected"
+      detections="$(grep -c ' FOUND$' "$log_file" || true)"
+    else
+      status="error"
+    fi
+  fi
+
+  record_engine "clamav" "ClamAV" "$status" "$rc" "$detections" "$log_file"
+}
+
+run_yara() {
+  local log_file="$ENGINE_DIR/yara.log"
+  local rc=0
+  local status="clean"
+  local detections=0
+
+  if [[ ! -f "$YARA_RULES" ]]; then
+    printf "No YARA rule bundle found at %s\n" "$YARA_RULES" > "$log_file"
+    record_engine "yara" "YARA" "skipped" "0" "0" "$log_file"
+    return
+  fi
+
+  if yara --recursive "$YARA_RULES" "$SOURCE_PATH" >"$log_file" 2>&1; then
+    rc=0
+    if [[ -s "$log_file" ]]; then
+      status="detected"
+      detections="$(wc -l < "$log_file" | tr -d ' ')"
+    else
+      status="clean"
+    fi
+  else
+    rc=$?
+    status="error"
+  fi
+
+  record_engine "yara" "YARA" "$status" "$rc" "$detections" "$log_file"
+}
+
+run_staged_engine() {
+  local engine_id="$1"
+  local display_name="$2"
+  local log_file="$ENGINE_DIR/${engine_id}.log"
+
+  if [[ ! -x "$STAGED_ENGINE_RUNNER" ]]; then
+    printf "No staged engine runner is present at %s\n" "$STAGED_ENGINE_RUNNER" > "$log_file"
+    record_engine "$engine_id" "$display_name" "skipped" "0" "0" "$log_file"
+    return
+  fi
+
+  readarray -t staged_result < <(
+    python3 "$STAGED_ENGINE_RUNNER" \
+      --engine "$engine_id" \
+      --source-path "$SOURCE_PATH" \
+      --log-file "$log_file"
+  )
+
+  local status="${staged_result[0]:-skipped}"
+  local rc="${staged_result[1]:-0}"
+  local detections="${staged_result[2]:-0}"
+  record_engine "$engine_id" "$display_name" "$status" "$rc" "$detections" "$log_file"
+}
+
+run_clamav
+run_yara
+
+OVERALL_STATUS="approved"
+if awk -F '\t' 'NR>1 && ($3 == "detected" || $3 == "error") { found=1 } END { exit(found ? 0 : 1) }' "$SUMMARY_FILE"; then
+  OVERALL_STATUS="blocked"
+fi
+
+FINISHED_AT="$(date -Iseconds)"
+{
+  printf "FINISHED_AT=%s\n" "$FINISHED_AT"
+  printf "OVERALL_STATUS=%s\n" "$OVERALL_STATUS"
+} >> "$METADATA_FILE"
+
+cat > "$LATEST_RUN_FILE" <<EOF
+RUN_ID=$RUN_ID
+RUN_DIR=$RUN_DIR
+METADATA_FILE=$METADATA_FILE
+SUMMARY_FILE=$SUMMARY_FILE
+REPORT_HTML=$REPORT_HTML
+REPORT_JSON=$REPORT_JSON
+SOURCE_PATH=$SOURCE_PATH
+DESTINATION_PATH=$DESTINATION_PATH
+EOF
+
+/usr/local/bin/generate-scan-report.py \
+  --metadata "$METADATA_FILE" \
+  --summary "$SUMMARY_FILE" \
+  --json-out "$REPORT_JSON" \
+  --html-out "$REPORT_HTML"
+
+ln -sfn "$RUN_DIR" "$LATEST_LINK"
+
+if [[ "$OVERALL_STATUS" != "approved" ]]; then
+  /usr/local/bin/report-debug-event.sh scan-blocked "Offline scan blocked media transfer for $SOURCE_PATH"
+  echo "Offline scan failed or detected threats. Review $REPORT_HTML before allowing any writable media." >&2
+  exit 1
+fi
+
+touch "$APPROVAL_FILE"
+/usr/local/bin/report-debug-event.sh scan-approved "Offline scan approved media transfer for $SOURCE_PATH"
+echo "Offline scan approved. Summary: $REPORT_HTML"
+echo "Mount approved destination media, then run: sudo /usr/local/bin/copy-approved-media.sh \"$SOURCE_PATH\" \"$DESTINATION_PATH\""

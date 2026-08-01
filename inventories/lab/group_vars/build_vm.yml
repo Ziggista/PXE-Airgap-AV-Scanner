@@ -5,19 +5,31 @@ nginx_site_name: av-build
 pxe_menu_file: "{{ tftp_root }}/pxelinux.cfg/default"
 pxe_server_workspace: /srv/pxe-client-image
 pxe_server_livebuild_root: "{{ pxe_server_workspace }}/live-build"
+pxe_server_debug_root: "{{ pxe_root }}/debug/pxe-client"
 pxe_server_base_url: "http://{{ ansible_host }}"
+pxe_server_client_base_url: "http://{{ pxe_server_boot_ip }}"
 pxe_server_proxy_host: "{{ hostvars['av-repo-vm'].ansible_host | default('av-repo-vm') }}"
 pxe_server_proxy_base_url: "http://{{ pxe_server_proxy_host }}"
 pxe_server_proxy_repo_base_url: "{{ pxe_server_proxy_base_url }}/ubuntu"
 pxe_server_proxy_definitions_base_url: "{{ pxe_server_proxy_base_url }}/definitions"
 pxe_server_proxy_artifacts_base_url: "{{ pxe_server_proxy_base_url }}/artifacts"
-pxe_server_client_image_name: av-client
+pxe_server_client_image_name: "{{ pxe_server_boot_profile_name }}"
 pxe_server_client_publish_dir: "{{ pxe_root }}/images/{{ pxe_server_client_image_name }}"
 pxe_server_tftp_client_publish_dir: "{{ tftp_root }}/images/{{ pxe_server_client_image_name }}"
 pxe_server_definitions_publish_dir: "{{ pxe_root }}/definitions/clamav"
+pxe_server_boot_method: iso-url
+pxe_server_boot_profile_name: "ubuntu-live-av-client-test"
+pxe_server_boot_iso_filename: "ubuntu-26.04-av-client-test-amd64.iso"
+pxe_server_boot_kernel_path: "images/{{ pxe_server_boot_profile_name }}/vmlinuz"
+pxe_server_boot_initrd_path: "images/{{ pxe_server_boot_profile_name }}/initrd"
+pxe_server_boot_rootfs_path: "images/{{ pxe_server_boot_profile_name }}/rootfs"
+pxe_server_boot_nfs_root: "{{ pxe_root }}/{{ pxe_server_boot_rootfs_path }}"
+pxe_server_boot_iso_url: "{{ pxe_server_client_base_url }}/artifacts/{{ pxe_server_boot_iso_filename }}"
+pxe_server_boot_append: "boot=casper ip=dhcp netboot=url url={{ pxe_server_boot_iso_url }} toram nopersistent cloud-config-url=/dev/null username={{ pxe_client_username }} userfullname=AV%20Scanner hostname=av-pxe-client"
 pxe_server_interface: "eth1"
 pxe_server_interface_mac: "00:15:5d:01:1c:0c"
 pxe_server_interface_address: "192.168.50.2/24"
+pxe_server_boot_ip: "{{ pxe_server_interface_address | regex_replace('/.*$', '') }}"
 pxe_server_dhcp_range_start: 192.168.50.100
 pxe_server_dhcp_range_end: 192.168.50.200
 pxe_server_dhcp_lease: 12h
@@ -29,6 +41,7 @@ build_vm_packages:
   - debootstrap
   - live-build
   - nginx
+  - python3
   - rsync
   - squashfs-tools
   - syslinux-common

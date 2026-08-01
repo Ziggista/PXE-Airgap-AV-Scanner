@@ -18,11 +18,22 @@
     - "{{ pxe_root }}/images"
     - "{{ pxe_root }}/artifacts"
     - "{{ pxe_root }}/definitions"
+    - "{{ pxe_root }}/debug"
+    - "{{ pxe_server_debug_root }}"
     - "{{ pxe_server_definitions_publish_dir }}"
     - "{{ pxe_server_workspace }}"
     - "{{ pxe_server_livebuild_root }}"
     - "{{ pxe_server_client_publish_dir }}"
+    - "{{ pxe_server_boot_nfs_root }}"
     - "{{ pxe_server_tftp_client_publish_dir }}"
+
+- name: Ensure NFS exports drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/exports.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
 
 - name: Render PXE lab netplan
   ansible.builtin.template:
@@ -53,6 +64,14 @@
     group: root
     mode: "0644"
 
+- name: Render iPXE boot script
+  ansible.builtin.template:
+    src: boot.ipxe.j2
+    dest: "{{ tftp_root }}/boot.ipxe"
+    owner: root
+    group: root
+    mode: "0644"
+
 - name: Publish BIOS PXE bootloader files into TFTP root
   ansible.builtin.copy:
     src: "{{ item.src }}"
@@ -72,6 +91,10 @@
       dest: "{{ tftp_root }}/libutil.c32"
     - src: /usr/lib/syslinux/modules/bios/menu.c32
       dest: "{{ tftp_root }}/menu.c32"
+    - src: /usr/lib/ipxe/undionly.kpxe
+      dest: "{{ tftp_root }}/undionly.kpxe"
+    - src: /usr/lib/ipxe/snponly.efi
+      dest: "{{ tftp_root }}/snponly.efi"
 
 - name: Render nginx site for PXE artifacts
   ansible.builtin.template:
@@ -81,6 +104,15 @@
     group: root
     mode: "0644"
   notify: Reload nginx
+
+- name: Allow nginx AppArmor profile to read PXE artifact tree
+  ansible.builtin.template:
+    src: usr.sbin.nginx.local.j2
+    dest: /etc/apparmor.d/local/usr.sbin.nginx
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload apparmor
 
 - name: Enable nginx build site
   ansible.builtin.file:
@@ -104,6 +136,40 @@
     - dnsmasq
     - nginx
     - tftpd-hpa
+    - nfs-kernel-server
+
+- name: Render PXE NFS export
+  ansible.builtin.template:
+    src: av-pxe.exports.j2
+    dest: /etc/exports.d/av-pxe.exports
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload nfs exports
+
+- name: Install PXE debug collector
+  ansible.builtin.template:
+    src: av-debug-collector.py.j2
+    dest: /usr/local/bin/av-debug-collector.py
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart av debug collector
+
+- name: Install PXE debug collector service
+  ansible.builtin.template:
+    src: av-debug-collector.service.j2
+    dest: /etc/systemd/system/av-debug-collector.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart av debug collector
+
+- name: Ensure PXE debug collector service is enabled and running
+  ansible.builtin.service:
+    name: av-debug-collector
+    state: started
+    enabled: true
 
 - name: Render PXE server upstream sync helper
   ansible.builtin.template:

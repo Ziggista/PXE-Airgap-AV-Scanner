@@ -25,3 +25,5 @@ qemu-img-win-x64-2_3_0.zip
 .DS_Store
 Thumbs.db
 AV.code-workspace
+
+inventories/lab/group_vars/all/license_acceptance.yml

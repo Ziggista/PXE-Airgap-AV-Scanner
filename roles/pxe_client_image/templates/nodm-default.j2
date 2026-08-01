@@ -1,0 +1,8 @@
+# nodm configuration for the PXE kiosk client
+NODM_ENABLED=true
+NODM_USER={{ pxe_client_username }}
+NODM_XINIT=/usr/bin/xinit
+NODM_FIRST_VT=7
+NODM_XSESSION=/home/{{ pxe_client_username }}/.xsession
+NODM_X_OPTIONS='vt7 -nolisten tcp'
+NODM_MIN_SESSION_TIME=5

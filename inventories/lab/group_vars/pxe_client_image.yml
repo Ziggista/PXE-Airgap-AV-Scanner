@@ -3,34 +3,142 @@ pxe_client_workspace: "{{ pxe_server_workspace }}"
 pxe_client_live_root: "{{ pxe_client_workspace }}/rootfs"
 pxe_client_output_dir: "{{ pxe_client_workspace }}/output"
 pxe_client_livebuild_root: "{{ pxe_server_livebuild_root }}"
+pxe_client_overlay_root: "{{ pxe_client_workspace }}/overlay"
+pxe_client_remaster_root: "{{ pxe_client_workspace }}/remaster"
+pxe_client_remaster_extract_root: "{{ pxe_client_remaster_root }}/iso-root"
+pxe_client_remaster_edit_root: "{{ pxe_client_remaster_root }}/edit"
+pxe_client_upstream_iso: "{{ pxe_root }}/artifacts/ubuntu-26.04-desktop-amd64.iso"
+pxe_client_remaster_source_squashfs: "minimal.squashfs"
+pxe_client_squashfs_compressor: "zstd"
+pxe_client_squashfs_compression_level: 8
+pxe_client_squashfs_processors: 4
+pxe_client_profile_name: "{{ pxe_server_boot_profile_name }}"
+pxe_client_output_iso: "{{ pxe_root }}/artifacts/{{ pxe_server_boot_iso_filename }}"
 pxe_client_username: scanner
+pxe_client_admin_username: ziggi-py
 pxe_client_hostname: av-pxe-client
 pxe_client_proxy_definitions_base_url: "{{ pxe_server_proxy_definitions_base_url }}"
-pxe_client_runtime_definitions_base_url: "{{ pxe_server_base_url }}/definitions/clamav"
+pxe_client_runtime_definitions_base_url: "{{ pxe_server_client_base_url }}/definitions/clamav"
 pxe_client_publish_dir: "{{ pxe_server_client_publish_dir }}"
 pxe_client_desktop_banner_color: "#a40000"
-pxe_client_network_test_target: "{{ pxe_server_proxy_host }}"
+pxe_client_network_test_target: "{{ pxe_server_boot_ip }}"
 pxe_client_network_test_port: 80
+pxe_client_vendor_bundle_root: "/opt/av/bundles"
+pxe_client_vendor_bundle_stage_root: "{{ project_root }}/runtime/vendor-bundles"
+pxe_client_yara_rules_path: "/opt/av/rules/offline_rules.yar"
+pxe_client_yara_rules_metadata_path: "/opt/av/rules/offline_rules.meta.json"
+pxe_client_active_provider_order:
+  - clamav
+  - yara
+pxe_client_definitions_preferred_max_age_hours: 24
+pxe_client_definitions_fail_max_age_hours: 96
+pxe_client_engine_providers:
+  clamav:
+    display_name: ClamAV
+    required: true
+    kind: signature-db
+    enabled: true
+    status: installed
+    bundle_path: /opt/av/definitions/clamav
+    notes: Bundled into the PXE image and staged into RAM at boot.
+  yara:
+    display_name: YARA
+    required: false
+    kind: rule-bundle
+    enabled: true
+    status: installed
+    bundle_path: /opt/av/rules/offline_rules.yar
+    metadata_path: /opt/av/rules/offline_rules.meta.json
+    notes: Offline rule bundle is shipped with the PXE image when present.
+  defender:
+    display_name: Microsoft Defender for Endpoint
+    required: false
+    kind: commercial-agent
+    enabled: false
+    status: managed_by_license_file
+    bundle_path: "{{ pxe_client_vendor_bundle_root }}/defender"
+    cli_hint: mdatp health --details definitions
+    notes: Requires a licensed Microsoft onboarding package and offline definition process.
+  sophos:
+    display_name: Sophos Protection for Linux
+    required: false
+    kind: commercial-agent
+    enabled: false
+    status: managed_by_license_file
+    bundle_path: "{{ pxe_client_vendor_bundle_root }}/sophos"
+    cli_hint: /opt/sophos-spl/plugins/av/bin/avscanner
+    notes: Requires a licensed Sophos installer bundle.
+  bitdefender:
+    display_name: Bitdefender Endpoint Security Tools
+    required: false
+    kind: commercial-agent
+    enabled: false
+    status: managed_by_license_file
+    bundle_path: "{{ pxe_client_vendor_bundle_root }}/bitdefender"
+    cli_hint: BEST / GravityZone package plus local CLI tooling
+    notes: Requires a licensed GravityZone/BEST bundle.
+pxe_client_test_mode: true
+pxe_client_allow_post_splash_debug: false
+pxe_client_disable_network_at_splash: true
+pxe_client_debug_report_base_url: "{{ pxe_server_client_base_url }}/debug/pxe-client"
 pxe_client_build_now: false
+pxe_client_test_ssh_public_keys:
+  - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOmjwNUVLGQIWdKeWAtIo1Kzv2WIx7r97Xz+2lmE2xEl ziggi-py-control-host
 
 pxe_client_packages:
   - clamav
   - clamav-freshclam
   - curl
+  - dbus-x11
   - exfatprogs
   - gir1.2-gtk-3.0
-  - lightdm
-  - live-boot
-  - live-config
-  - network-manager
+  - nodm
   - ntfs-3g
   - openbox
   - pcmanfm
   - python3
   - python3-gi
+  - hfsplus
+  - hfsprogs
   - dosfstools
   - rsync
+  - openssh-server
   - udisks2
   - usbutils
-  - xorg
+  - xinit
   - yara
+
+pxe_client_remove_packages:
+  - aisleriot
+  - cheese
+  - evolution
+  - gnome-calendar
+  - gnome-contacts
+  - gnome-mahjongg
+  - gnome-maps
+  - gnome-mines
+  - gnome-music
+  - gnome-remote-desktop
+  - gnome-software
+  - gnome-software-common
+  - gnome-sudoku
+  - libreoffice-base-core
+  - libreoffice-calc
+  - libreoffice-common
+  - libreoffice-core
+  - libreoffice-draw
+  - libreoffice-gnome
+  - libreoffice-impress
+  - libreoffice-math
+  - libreoffice-style-colibre
+  - libreoffice-writer
+  - lightdm
+  - remmina
+  - rhythmbox
+  - shotwell
+  - simple-scan
+  - thunderbird
+  - totem
+  - transmission-gtk
+  - usb-creator-gtk
+  - yelp

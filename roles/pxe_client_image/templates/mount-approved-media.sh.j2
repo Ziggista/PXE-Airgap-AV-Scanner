@@ -4,6 +4,28 @@ set -euo pipefail
 DEVICE="${1:?usage: mount-approved-media.sh /dev/sdY1}"
 TARGET="${2:-/mnt/approved-media}"
 APPROVAL="/run/av-scan/approved"
+METADATA_DIR="/run/av-scan"
+METADATA_FILE="$METADATA_DIR/destination-media.env"
+
+normalize_fs() {
+  case "${1,,}" in
+    fuseblk|ntfs)
+      printf 'ntfs\n'
+      ;;
+    vfat|fat|fat32|msdos)
+      printf 'fat32\n'
+      ;;
+    exfat)
+      printf 'exfat\n'
+      ;;
+    hfsplus)
+      printf 'hfsplus\n'
+      ;;
+    *)
+      printf '%s\n' "${1:-unknown}"
+      ;;
+  esac
+}
 
 if [[ ! -f "$APPROVAL" ]]; then
   echo "Writable destination media is blocked until offline scans complete successfully." >&2
@@ -12,4 +34,19 @@ fi
 
 mkdir -p "$TARGET"
 mount -o rw,nosuid,nodev "$DEVICE" "$TARGET"
+mkdir -p "$METADATA_DIR"
+
+FS_TYPE="$(findmnt -n -o FSTYPE --target "$TARGET" 2>/dev/null || true)"
+FS_SOURCE="$(findmnt -n -o SOURCE --target "$TARGET" 2>/dev/null || true)"
+FS_LABEL="$(blkid -o value -s LABEL "$DEVICE" 2>/dev/null || true)"
+FS_TYPE="$(normalize_fs "${FS_TYPE:-unknown}")"
+
+cat > "$METADATA_FILE" <<EOF
+DEVICE=$DEVICE
+MOUNT_SOURCE=${FS_SOURCE:-$DEVICE}
+FILESYSTEM=${FS_TYPE:-unknown}
+LABEL=${FS_LABEL:-unknown}
+TARGET=$TARGET
+EOF
+
 echo "Mounted $DEVICE read-write at $TARGET"

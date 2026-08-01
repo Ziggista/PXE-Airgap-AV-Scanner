@@ -1,0 +1,27 @@
+---
+# Explicit operator-controlled commercial license acknowledgements for this lab.
+# Copy this file to license_acceptance.yml and update it locally after you have
+# personally reviewed and accepted the vendor terms for the exact product build
+# you intend to stage.
+license_acceptance:
+  microsoft_defender:
+    accepted: false
+    accepted_by: ""
+    accepted_at: ""
+    product: "Microsoft Defender for Endpoint on Linux"
+    terms_reference: "https://learn.microsoft.com/en-us/defender-endpoint/microsoft-defender-endpoint-linux"
+    notes: ""
+  sophos:
+    accepted: false
+    accepted_by: ""
+    accepted_at: ""
+    product: "Sophos Protection for Linux"
+    terms_reference: "https://docs.sophos.com/esg/spl/en-us/help/ServerProtectionAgent/index.html"
+    notes: ""
+  bitdefender:
+    accepted: false
+    accepted_by: ""
+    accepted_at: ""
+    product: "Bitdefender Endpoint Security Tools for Linux"
+    terms_reference: "https://www.bitdefender.com/business/support/en/77209-157515-bitdefender-endpoint-security-tools-for-linux-quick-start-guide.html"
+    notes: ""

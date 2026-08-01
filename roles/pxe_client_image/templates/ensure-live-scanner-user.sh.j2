@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+scanner_user="{{ pxe_client_username }}"
+scanner_home="/home/${scanner_user}"
+
+if ! getent group "${scanner_user}" >/dev/null 2>&1; then
+  groupadd "${scanner_user}"
+fi
+
+if ! id -u "${scanner_user}" >/dev/null 2>&1; then
+  useradd \
+    -m \
+    -k /etc/skel \
+    -s /bin/bash \
+    -g "${scanner_user}" \
+    -G adm,audio,cdrom,dialout,dip,floppy,netdev,plugdev,sudo,video \
+    "${scanner_user}"
+fi
+
+install -d -m 0700 -o "${scanner_user}" -g "${scanner_user}" \
+  "${scanner_home}/.config" \
+  "${scanner_home}/.local" \
+  "${scanner_home}/.local/share" \
+  "${scanner_home}/.local/share/applications" \
+  "${scanner_home}/.local/state"
+
+install -d -m 0755 -o "${scanner_user}" -g "${scanner_user}" /var/log/av-pxe
+touch /var/log/av-pxe/session.log /var/log/av-pxe/openbox-autostart.log /var/log/av-pxe/banner.log
+chown "${scanner_user}:${scanner_user}" \
+  /var/log/av-pxe/session.log \
+  /var/log/av-pxe/openbox-autostart.log \
+  /var/log/av-pxe/banner.log
+
+install -d -m 0755 -o "${scanner_user}" -g "${scanner_user}" /run/av
+rm -f /run/av/banner-ready /run/av/post-splash-network-disabled
+
+if [[ -f /etc/skel/.xsession && ! -f "${scanner_home}/.xsession" ]]; then
+  install -m 0755 -o "${scanner_user}" -g "${scanner_user}" /etc/skel/.xsession "${scanner_home}/.xsession"
+fi
+if [[ -f /etc/skel/.xinitrc && ! -f "${scanner_home}/.xinitrc" ]]; then
+  install -m 0755 -o "${scanner_user}" -g "${scanner_user}" /etc/skel/.xinitrc "${scanner_home}/.xinitrc"
+fi
+if [[ -f /etc/skel/.bash_profile && ! -f "${scanner_home}/.bash_profile" ]]; then
+  install -m 0644 -o "${scanner_user}" -g "${scanner_user}" /etc/skel/.bash_profile "${scanner_home}/.bash_profile"
+fi
+
+if [[ -d /etc/skel/.config ]]; then
+  cp -a /etc/skel/.config/. "${scanner_home}/.config/" 2>/dev/null || true
+fi
+if [[ -d /etc/skel/.local/share/applications ]]; then
+  cp -a /etc/skel/.local/share/applications/. "${scanner_home}/.local/share/applications/" 2>/dev/null || true
+fi
+
+cat >/var/lib/AccountsService/users/"${scanner_user}" <<'EOF'
+[User]
+Language=en_AU.UTF-8
+Session=av-client-openbox
+XSession=av-client-openbox
+SystemAccount=false
+EOF
+
+chown -R "${scanner_user}:${scanner_user}" "${scanner_home}"
+chown root:root /var/lib/AccountsService/users/"${scanner_user}"
+chmod 0644 /var/lib/AccountsService/users/"${scanner_user}"

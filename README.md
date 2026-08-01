@@ -8,7 +8,7 @@ Python scaffolding for a three-part offline media scanning workflow with a prima
 
 Windows can still be used as an optional acquisition workstation for vendor media that is not naturally distributed through APT, but Items 1, 2, and 3 should all run on Ubuntu.
 
-This repository now includes Ansible-managed control, proxy, and PXE server roles, plus a staged Ubuntu live-build workflow for the PXE client image. Physical PXE-client enforcement details such as post-boot NIC handling still need hardening and real hardware validation.
+This repository now includes Ansible-managed control, proxy, and PXE server roles, plus a remastered Ubuntu Desktop PXE client workflow built from a known-good upstream UEFI base. Physical PXE-client enforcement details such as post-boot NIC handling still need hardening and real hardware validation.
 
 ## Project layout
 
@@ -22,6 +22,8 @@ This repository now includes Ansible-managed control, proxy, and PXE server role
 - `tools/`
   - `acquire_media.py`
   - `bootstrap_local_machine.py`
+  - `refresh_hyperv_inventory.py`
+  - `stage_upstream_live_iso.py`
   - `update_local_repo.py`
   - `start_proxy.py`
   - `start_build_server.py`
@@ -78,11 +80,31 @@ Acquire and stage non-APT media from a workstation if needed:
 python ./tools/acquire_media.py --config ./configs/media-acquisition.sample.json
 ```
 
+Stage an upstream Ubuntu live ISO into a PXE-ready published profile:
+
+```powershell
+python .\tools\stage_upstream_live_iso.py `
+  --iso .\runtime\downloads\ubuntu-26.04-desktop-amd64.iso `
+  --profile-name ubuntu-live-desktop
+```
+
 Bootstrap or re-sync the local Windows checkout from GitHub:
 
 ```powershell
 python .\tools\bootstrap_local_machine.py
 python .\tools\update_local_repo.py
+```
+
+Refresh Hyper-V guest IPs in the Ansible lab inventory after a reboot:
+
+```powershell
+python .\tools\refresh_hyperv_inventory.py
+```
+
+Use `--check` first when you only want to inspect the current Hyper-V neighbor-table mapping without editing inventory:
+
+```powershell
+python .\tools\refresh_hyperv_inventory.py --check
 ```
 
 ## What this scaffold already does
@@ -96,9 +118,10 @@ python .\tools\update_local_repo.py
 - Includes Ubuntu `systemd` unit templates for the VM-hosted services.
 - Includes a single Ansible repository with inventories, playbooks, and role skeletons for all three platform components.
 - Includes a control-node playbook path for the Ubuntu Ansible runner, including the `ziggi-py` automation user and guarded third-party repo handling.
-- Includes a PXE client image role that stages an autologin desktop, disconnect banner, read-only source media mounts, gated writable destination mounts, and offline scan helpers.
+- Includes a PXE client image role that remasters the working Ubuntu Desktop PXE base with an autologin desktop, disconnect banner, test-mode SSH/debug access, read-only source media mounts, gated writable destination mounts, and offline scan helpers.
 - Includes a `build-pxe-client-assets.yml` playbook to sync ClamAV definitions from the proxy and publish PXE boot assets from the build VM.
 - Includes a `sync-pxe-definitions.yml` playbook so daily ClamAV signature updates can flow proxy -> PXE server -> PXE client boot without rebuilding the full client image.
+- Includes a Windows staging helper for upstream Ubuntu live ISOs so the working UEFI PXE base can be published consistently.
 
 ## What still needs implementation
 
@@ -112,6 +135,7 @@ python .\tools\update_local_repo.py
 ## Design notes
 
 - The proxy/build services are intended to run inside dedicated Ubuntu VMs on Hyper-V.
+- On Hyper-V `Default Switch`, guest management IPs are not stable across host or guest restarts. Refresh `inventories/lab/hosts.yml` with `tools/refresh_hyperv_inventory.py` before running Ansible if SSH suddenly fails after a reboot.
 - The PXE client should boot an Ubuntu live runtime entirely into RAM, then mount source and destination media as needed.
 - Windows may still be used to acquire vendor media, signatures, and portable scanners before publishing them to the build VM.
 - The copy stage is blocked unless every enabled engine returns a success code.

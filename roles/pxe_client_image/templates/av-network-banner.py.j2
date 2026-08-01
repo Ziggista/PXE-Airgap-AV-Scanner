@@ -1,19 +1,47 @@
 #!/usr/bin/env python3
+import html
+import json
 import socket
+import traceback
+from datetime import datetime, timezone
 from pathlib import Path
+
 import gi
+
+gi.require_version("Gdk", "3.0")
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk
+gi.require_version("Pango", "1.0")
+from gi.repository import Gdk, GLib, Gtk, Pango
 
 TARGET = "{{ pxe_client_network_test_target }}"
 PORT = {{ pxe_client_network_test_port }}
 STATUS_FILE = Path("/run/av/definition-sync.status")
+METADATA_FILE = Path("/run/av/definition-sync.json")
+TEST_MODE = {{ "True" if pxe_client_test_mode else "False" }}
+POST_SPLASH_LOCK = Path("/run/av/post-splash-network-disabled")
+BANNER_READY_FILE = Path("/run/av/banner-ready")
+LOG_FILE = Path("/var/log/av-pxe/banner.log")
+
+
+def log(message):
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with LOG_FILE.open("a", encoding="utf-8") as handle:
+        handle.write(f"{message}\n")
 
 
 def definition_status():
     if not STATUS_FILE.exists():
         return "pending"
     return STATUS_FILE.read_text(encoding="utf-8").strip() or "pending"
+
+
+def load_definition_metadata():
+    if not METADATA_FILE.exists():
+        return {}
+    try:
+        return json.loads(METADATA_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
 
 
 def network_reachable():
@@ -24,52 +52,262 @@ def network_reachable():
         return False
 
 
+def mark_post_splash_lock():
+    POST_SPLASH_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    POST_SPLASH_LOCK.write_text("1\n", encoding="utf-8")
+
+
+def mark_banner_ready():
+    BANNER_READY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    BANNER_READY_FILE.write_text("1\n", encoding="utf-8")
+
+
+def format_build_timestamp(value):
+    if not value:
+        return "unknown"
+    try:
+        parsed = datetime.strptime(value, "%d %b %Y %H:%M %z")
+        return parsed.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    except ValueError:
+        return value
+
+
+def format_age_hours(value):
+    if value is None:
+        return "unknown"
+    return f"{value:.1f}h"
+
+
+def state_color(state):
+    return {
+        "healthy": "green",
+        "warning": "#b36b00",
+        "fail": "red",
+        "unavailable": "#555753",
+        "unknown": "#555753",
+    }.get(state, "#555753")
+
+
+def state_label(state):
+    return {
+        "healthy": "healthy",
+        "warning": "warning",
+        "fail": "fail",
+        "unavailable": "unavailable",
+        "unknown": "unknown",
+    }.get(state, state)
+
+
+def format_engine_time(value):
+    if not value:
+        return "unknown"
+    if isinstance(value, str):
+        if "T" in value:
+            return value.replace("T", " ").replace("+00:00", " UTC")
+        return format_build_timestamp(value)
+    return str(value)
+
+
 class Banner(Gtk.Window):
     def __init__(self):
         super().__init__(title="Airgap AV Scanner")
-        self.set_default_size(900, 220)
+        self.set_default_size(1280, 800)
         self.set_keep_above(True)
-        self.set_resizable(False)
+        self.set_resizable(True)
+        self.set_decorated(False)
+        self.fullscreen()
 
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        box.set_border_width(18)
+        screen = Gdk.Screen.get_default()
+        screen_width = screen.get_width() if screen else 1280
+        header_size = 24000 if screen_width >= 1600 else 20000 if screen_width >= 1200 else 17000
+        body_size = 13000 if screen_width >= 1600 else 12000
+        max_width = min(max(screen_width - 120, 760), 1320)
+
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        root.set_border_width(40)
+
+        center = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        center.set_valign(Gtk.Align.CENTER)
+        center.set_halign(Gtk.Align.CENTER)
+        center.set_hexpand(True)
+        center.set_vexpand(True)
+
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+        card.set_halign(Gtk.Align.CENTER)
+        card.set_size_request(max_width, -1)
 
         header = Gtk.Label()
+        header.set_xalign(0.5)
+        header.set_line_wrap(True)
+        header.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        header.set_justify(Gtk.Justification.CENTER)
         header.set_markup(
-            "<span foreground='white' background='{{ pxe_client_desktop_banner_color }}' size='18000'><b>DISCONNECT ONLY AFTER DEFINITION SYNC IS READY</b></span>"
+            "<span foreground='white' background='{{ pxe_client_desktop_banner_color }}' size='"
+            + str(header_size)
+            + "'><b>DISCONNECT ONLY AFTER DEFINITION SYNC IS READY</b></span>"
         )
 
-        text = Gtk.Label(
-            label="This client is intended to scan public media offline. Wait for AV definition sync to complete, disconnect network access, then use the test button below."
+        self.summary = Gtk.Label()
+        self.summary.set_xalign(0.0)
+        self.summary.set_line_wrap(True)
+        self.summary.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        self.summary.set_justify(Gtk.Justification.LEFT)
+        self.summary.set_markup(
+            f"<span size='{body_size}'>This client is intended to scan public media offline. AV definitions are loaded from the boot image, staged locally in RAM, then validated for recency before scanning is allowed.</span>"
         )
-        text.set_line_wrap(True)
 
-        self.status = Gtk.Label(label="")
-        self.refresh_status()
+        self.definition_info = Gtk.Label()
+        self.definition_info.set_xalign(0.0)
+        self.definition_info.set_line_wrap(True)
+        self.definition_info.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        self.definition_info.set_justify(Gtk.Justification.LEFT)
 
-        button = Gtk.Button(label="Test Network Disconnected")
-        button.connect("clicked", self.on_test)
+        self.policy_info = Gtk.Label()
+        self.policy_info.set_xalign(0.0)
+        self.policy_info.set_line_wrap(True)
+        self.policy_info.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        self.policy_info.set_justify(Gtk.Justification.LEFT)
+
+        self.engine_freshness = Gtk.Label()
+        self.engine_freshness.set_xalign(0.0)
+        self.engine_freshness.set_line_wrap(True)
+        self.engine_freshness.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        self.engine_freshness.set_justify(Gtk.Justification.LEFT)
+
+        self.freshness_status = Gtk.Label()
+        self.freshness_status.set_xalign(0.0)
+        self.freshness_status.set_line_wrap(True)
+        self.freshness_status.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        self.freshness_status.set_justify(Gtk.Justification.LEFT)
+
+        self.network_status = Gtk.Label()
+        self.network_status.set_xalign(0.0)
+        self.network_status.set_line_wrap(True)
+        self.network_status.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        self.network_status.set_justify(Gtk.Justification.LEFT)
+
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        button_box.set_halign(Gtk.Align.FILL)
+        button_box.set_hexpand(True)
+
         refresh = Gtk.Button(label="Refresh Readiness")
+        refresh.set_hexpand(True)
         refresh.connect("clicked", self.on_refresh)
 
-        box.pack_start(header, False, False, 0)
-        box.pack_start(text, False, False, 0)
-        box.pack_start(self.status, False, False, 0)
-        box.pack_start(refresh, False, False, 0)
-        box.pack_start(button, False, False, 0)
+        button = Gtk.Button(label="Test Network Disconnected")
+        button.set_hexpand(True)
+        button.connect("clicked", self.on_test)
 
-        self.add(box)
+        button_box.pack_start(refresh, True, True, 0)
+        button_box.pack_start(button, True, True, 0)
+
+        card.pack_start(header, False, False, 0)
+        card.pack_start(self.summary, False, False, 0)
+        card.pack_start(self.definition_info, False, False, 0)
+        card.pack_start(self.policy_info, False, False, 0)
+        card.pack_start(self.engine_freshness, False, False, 0)
+        card.pack_start(self.freshness_status, False, False, 0)
+        card.pack_start(self.network_status, False, False, 0)
+        card.pack_start(button_box, False, False, 0)
+
+        center.pack_start(card, False, False, 0)
+        root.pack_start(center, True, True, 0)
+        self.add(root)
+
+        mark_post_splash_lock()
+        self.refresh_status()
+        log("banner window initialized")
+        GLib.timeout_add_seconds(3, self.run_startup_validation)
 
     def refresh_status(self):
         status = definition_status()
-        if status == "ready":
-            self.status.set_markup("<span foreground='green'><b>Definition sync complete. Disconnect the network, then run the network test.</b></span>")
-        elif status == "failed":
-            self.status.set_markup("<span foreground='red'><b>Definition sync failed. Do not disconnect until this is corrected.</b></span>")
-        elif status == "running":
-            self.status.set_markup("<span foreground='orange'><b>Definition sync is still running. Wait before disconnecting the network.</b></span>")
+        metadata = load_definition_metadata()
+        freshness = metadata.get("freshness_state", "unknown")
+        reference_file = metadata.get("reference_file") or "unknown"
+        reference_build_time = format_build_timestamp(metadata.get("reference_build_time"))
+        reference_age_hours = format_age_hours(metadata.get("reference_age_hours"))
+        preferred_age = metadata.get("preferred_max_age_hours", {{ pxe_client_definitions_preferred_max_age_hours }})
+        fail_age = metadata.get("fail_max_age_hours", {{ pxe_client_definitions_fail_max_age_hours }})
+
+        files = metadata.get("files", {})
+        engines = metadata.get("engines", {})
+        detail_parts = []
+        for key in ("daily.cld", "daily.cvd", "main.cld", "main.cvd", "bytecode.cld", "bytecode.cvd"):
+            entry = files.get(key)
+            if not entry:
+                continue
+            detail_parts.append(f"{key}: {format_build_timestamp(entry.get('build_time'))}")
+        detail_text = " | ".join(detail_parts) if detail_parts else "No per-file signature timestamps were detected."
+        self.definition_info.set_markup(
+            "<span size='12000'><b>Bundled definition dates:</b> "
+            + html.escape(detail_text)
+            + "</span>"
+        )
+        self.policy_info.set_markup(
+            "<span size='12000'><b>Freshness policy:</b> target under "
+            + html.escape(str(preferred_age))
+            + " hours, hard fail above "
+            + html.escape(str(fail_age))
+            + " hours. Reference source: <b>"
+            + html.escape(reference_file)
+            + "</b> built <b>"
+            + html.escape(reference_build_time)
+            + "</b> (age <b>"
+            + html.escape(reference_age_hours)
+            + "</b>).</span>"
+        )
+        engine_parts = []
+        provider_order = metadata.get("provider_order") or ["clamav", "yara", "defender", "sophos", "bitdefender"]
+        for engine_key in provider_order:
+            engine = engines.get(engine_key, {})
+            display_name = engine.get("display_name") or engine_key
+            engine_state = engine.get("state", "unknown")
+            engine_time = format_engine_time(engine.get("reference_build_time"))
+            engine_age = format_age_hours(engine.get("reference_age_hours"))
+            engine_message = engine.get("message") or "No freshness details available."
+            engine_status = engine.get("status") or "unknown"
+            engine_parts.append(
+                "<span foreground='"
+                + state_color(engine_state)
+                + "'><b>"
+                + html.escape(display_name)
+                + ":</b> "
+                + html.escape(state_label(engine_state))
+                + "</span> "
+                + "(status "
+                + html.escape(str(engine_status))
+                + ") "
+                + html.escape(engine_time)
+                + " (age "
+                + html.escape(engine_age)
+                + "). "
+                + html.escape(engine_message)
+            )
+        self.engine_freshness.set_markup(
+            "<span size='12000'><b>Engine freshness:</b><br>"
+            + "<br>".join(engine_parts)
+            + "</span>"
+        )
+        self.network_status.set_markup("<span foreground='#555753' size='12000'><b>Offline link state:</b> Network isolation check has not run yet for this refresh cycle.</span>")
+
+        if status == "failed":
+            self.freshness_status.set_markup("<span foreground='red' size='13000'><b>Bundled AV definitions were not staged correctly. Do not use this client until the image is rebuilt.</b></span>")
+            return
+        if status == "running":
+            self.freshness_status.set_markup("<span foreground='orange' size='13000'><b>Bundled AV definitions are still being staged locally. Wait for readiness.</b></span>")
+            return
+        if status != "ready":
+            self.freshness_status.set_markup("<span foreground='orange' size='13000'><b>Bundled AV definition status is pending. Refresh before scanning.</b></span>")
+            return
+
+        if freshness == "fail":
+            self.freshness_status.set_markup("<span foreground='red' size='13000'><b>Bundled definitions are older than the maximum allowed age. Rebuild the PXE client image before scanning any media.</b></span>")
+        elif freshness == "warning":
+            self.freshness_status.set_markup("<span foreground='#b36b00' size='13000'><b>Bundled definitions are older than the 24-hour target but still within the temporary tolerance window. Rebuild the image soon.</b></span>")
+        elif TEST_MODE:
+            self.freshness_status.set_markup("<span foreground='green' size='13000'><b>Bundled AV definitions are ready. Post-splash debug callbacks are disabled by default, and this RAM-resident client has already attempted to drop network access before showing this splash.</b></span>")
         else:
-            self.status.set_markup("<span foreground='orange'><b>Definition sync status is pending. Refresh before disconnecting the network.</b></span>")
+            self.freshness_status.set_markup("<span foreground='green' size='13000'><b>Bundled AV definitions are ready. The scanner should now operate from its local runtime copy with network disabled.</b></span>")
 
     def on_refresh(self, _button):
         self.refresh_status()
@@ -77,15 +315,32 @@ class Banner(Gtk.Window):
     def on_test(self, _button):
         self.refresh_status()
         if definition_status() != "ready":
-            self.status.set_markup("<span foreground='red'><b>Definition sync is not ready yet. Keep the network connected until sync completes.</b></span>")
+            self.network_status.set_markup("<span foreground='red' size='13000'><b>Bundled AV definitions are not ready yet. Wait for the local staging step to complete before validating network isolation.</b></span>")
+            return
+        metadata = load_definition_metadata()
+        if metadata.get("freshness_state") == "fail":
+            self.network_status.set_markup("<span foreground='red' size='13000'><b>Bundled definitions are stale beyond the maximum allowed age. Rebuild the PXE client image before scanning.</b></span>")
             return
         if network_reachable():
-            self.status.set_markup("<span foreground='red'><b>Network is still reachable. Disconnect it before scanning.</b></span>")
+            self.network_status.set_markup("<span foreground='red' size='13000'><b>Offline link state:</b> Network is still reachable. This boot did not fully isolate the client yet and should be treated as a failed offline transition.</span>")
         else:
-            self.status.set_markup("<span foreground='green'><b>Network test passed. Continue with offline scanning only.</b></span>")
+            self.network_status.set_markup("<span foreground='green' size='13000'><b>Offline link state:</b> Network test passed. Continue with offline scanning only.</span>")
+
+    def run_startup_validation(self):
+        self.on_test(None)
+        return False
 
 
-win = Banner()
-win.connect("destroy", Gtk.main_quit)
-win.show_all()
-Gtk.main()
+try:
+    log("banner process starting")
+    win = Banner()
+    win.connect("destroy", Gtk.main_quit)
+    win.show_all()
+    mark_banner_ready()
+    log("banner ready signaled")
+    Gtk.main()
+    log("banner main loop exited")
+except Exception:
+    log("banner crashed with traceback:")
+    log(traceback.format_exc())
+    raise

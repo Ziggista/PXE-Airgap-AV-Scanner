@@ -13,40 +13,40 @@
     mode: "0755"
   loop:
     - "{{ pxe_client_workspace }}"
-    - "{{ pxe_client_live_root }}"
     - "{{ pxe_client_output_dir }}"
-    - "{{ pxe_client_livebuild_root }}"
-    - "{{ pxe_client_livebuild_root }}/config"
-    - "{{ pxe_client_livebuild_root }}/config/includes.chroot"
-    - "{{ pxe_client_livebuild_root }}/config/includes.chroot/etc/lightdm/lightdm.conf.d"
-    - "{{ pxe_client_livebuild_root }}/config/includes.chroot/etc/xdg/autostart"
-    - "{{ pxe_client_livebuild_root }}/config/includes.chroot/usr/local/bin"
-    - "{{ pxe_client_livebuild_root }}/config/includes.chroot/opt/av/definitions/clamav"
-    - "{{ pxe_client_livebuild_root }}/config/includes.chroot/etc/systemd/system"
-    - "{{ pxe_client_livebuild_root }}/config/includes.chroot/etc/systemd/system/multi-user.target.wants"
-    - "{{ pxe_client_livebuild_root }}/config/package-lists"
-    - "{{ pxe_client_livebuild_root }}/config/hooks/live"
-
-- name: Render PXE client package list
-  ansible.builtin.template:
-    src: av-client.list.chroot.j2
-    dest: "{{ pxe_client_livebuild_root }}/config/package-lists/av-client.list.chroot"
-    owner: root
-    group: root
-    mode: "0644"
-
-- name: Render PXE client lightdm autologin config
-  ansible.builtin.template:
-    src: 20-av-client-autologin.conf.j2
-    dest: "{{ pxe_client_livebuild_root }}/config/includes.chroot/etc/lightdm/lightdm.conf.d/20-av-client-autologin.conf"
-    owner: root
-    group: root
-    mode: "0644"
+    - "{{ pxe_client_overlay_root }}"
+    - "{{ pxe_client_remaster_root }}"
+    - "{{ pxe_client_remaster_extract_root }}"
+    - "{{ pxe_client_remaster_edit_root }}"
+    - "{{ pxe_client_overlay_root }}/etc/av-pxe"
+    - "{{ pxe_client_overlay_root }}/etc/default"
+    - "{{ pxe_client_overlay_root }}/etc/gdm3"
+    - "{{ pxe_client_overlay_root }}/etc/lightdm/lightdm.conf.d"
+    - "{{ pxe_client_overlay_root }}/etc/skel"
+    - "{{ pxe_client_overlay_root }}/etc/skel/.config"
+    - "{{ pxe_client_overlay_root }}/etc/skel/.local"
+    - "{{ pxe_client_overlay_root }}/etc/skel/.local/share"
+    - "{{ pxe_client_overlay_root }}/etc/skel/.local/share/applications"
+    - "{{ pxe_client_overlay_root }}/etc/systemd/system/getty@tty1.service.d"
+    - "{{ pxe_client_overlay_root }}/etc/xdg/autostart"
+    - "{{ pxe_client_overlay_root }}/etc/xdg/openbox"
+    - "{{ pxe_client_overlay_root }}/etc/systemd/system"
+    - "{{ pxe_client_overlay_root }}/etc/systemd/system/multi-user.target.wants"
+    - "{{ pxe_client_overlay_root }}/etc/sudoers.d"
+    - "{{ pxe_client_overlay_root }}/usr/local/bin"
+    - "{{ pxe_client_overlay_root }}/usr/local/sbin"
+    - "{{ pxe_client_overlay_root }}/usr/lib/user-setup"
+    - "{{ pxe_client_overlay_root }}/opt/av/definitions/clamav"
+    - "{{ pxe_client_overlay_root }}{{ pxe_client_vendor_bundle_root }}"
+    - "{{ pxe_client_overlay_root }}{{ pxe_client_vendor_bundle_root }}/defender"
+    - "{{ pxe_client_overlay_root }}{{ pxe_client_vendor_bundle_root }}/sophos"
+    - "{{ pxe_client_overlay_root }}{{ pxe_client_vendor_bundle_root }}/bitdefender"
+    - "{{ pxe_client_overlay_root }}/opt/av/rules"
 
 - name: Render PXE client desktop autostart entry
   ansible.builtin.template:
     src: av-network-banner.desktop.j2
-    dest: "{{ pxe_client_livebuild_root }}/config/includes.chroot/etc/xdg/autostart/av-network-banner.desktop"
+    dest: "{{ pxe_client_overlay_root }}/etc/xdg/autostart/av-network-banner.desktop"
     owner: root
     group: root
     mode: "0644"
@@ -54,15 +54,212 @@
 - name: Render PXE client network warning app
   ansible.builtin.template:
     src: av-network-banner.py.j2
-    dest: "{{ pxe_client_livebuild_root }}/config/includes.chroot/usr/local/bin/av-network-banner.py"
+    dest: "{{ pxe_client_overlay_root }}/usr/local/bin/av-network-banner.py"
     owner: root
     group: root
     mode: "0755"
 
+- name: Render PXE client runtime configuration
+  ansible.builtin.template:
+    src: av-pxe-client.env.j2
+    dest: "{{ pxe_client_overlay_root }}/etc/av-pxe/client.env"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render casper live-user configuration
+  ansible.builtin.template:
+    src: casper.conf.j2
+    dest: "{{ pxe_client_overlay_root }}/etc/casper.conf"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render GDM autologin configuration
+  ansible.builtin.template:
+    src: gdm-custom.conf.j2
+    dest: "{{ pxe_client_overlay_root }}/etc/gdm3/custom.conf"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render LightDM autologin configuration
+  ansible.builtin.template:
+    src: 20-av-client-autologin.conf.j2
+    dest: "{{ pxe_client_overlay_root }}/etc/lightdm/lightdm.conf.d/20-av-client-autologin.conf"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render nodm configuration
+  ansible.builtin.template:
+    src: nodm-default.j2
+    dest: "{{ pxe_client_overlay_root }}/etc/default/nodm"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render tty1 autologin override
+  ansible.builtin.file:
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/getty@tty1.service.d/autologin.conf"
+    state: absent
+
+- name: Render scanner bash profile into skel
+  ansible.builtin.template:
+    src: scanner-bash-profile.j2
+    dest: "{{ pxe_client_overlay_root }}/etc/skel/.bash_profile"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render scanner X init profile into skel
+  ansible.builtin.template:
+    src: scanner-xinitrc.j2
+    dest: "{{ pxe_client_overlay_root }}/etc/skel/.xinitrc"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render dedicated kiosk X startup service
+  ansible.builtin.template:
+    src: av-kiosk-x.service.j2
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/av-kiosk-x.service"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable dedicated kiosk X startup service
+  ansible.builtin.file:
+    src: ../av-kiosk-x.service
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/multi-user.target.wants/av-kiosk-x.service"
+    state: link
+
+- name: Render kiosk X client wrapper
+  ansible.builtin.template:
+    src: start-kiosk-x-client.sh.j2
+    dest: "{{ pxe_client_overlay_root }}/usr/local/bin/start-kiosk-x-client.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render kiosk session wrapper
+  ansible.builtin.template:
+    src: av-kiosk-session.sh.j2
+    dest: "{{ pxe_client_overlay_root }}/usr/local/bin/av-kiosk-session.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render network shutdown helper
+  ansible.builtin.template:
+    src: disable-network-access.sh.j2
+    dest: "{{ pxe_client_overlay_root }}/usr/local/bin/disable-network-access.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render Openbox autostart helper
+  ansible.builtin.template:
+    src: av-openbox-autostart.sh.j2
+    dest: "{{ pxe_client_overlay_root }}/usr/local/bin/av-openbox-autostart.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render Openbox autostart configuration
+  ansible.builtin.template:
+    src: openbox-autostart.j2
+    dest: "{{ pxe_client_overlay_root }}/etc/xdg/openbox/autostart"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render live scanner user bootstrap helper
+  ansible.builtin.template:
+    src: ensure-live-scanner-user.sh.j2
+    dest: "{{ pxe_client_overlay_root }}/usr/local/sbin/ensure-live-scanner-user.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render casper live-user setup shim
+  ansible.builtin.template:
+    src: user-setup-apply.j2
+    dest: "{{ pxe_client_overlay_root }}/usr/lib/user-setup/user-setup-apply"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render live scanner user bootstrap service
+  ansible.builtin.template:
+    src: av-live-scanner-user.service.j2
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/av-live-scanner-user.service"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable live scanner user bootstrap service
+  ansible.builtin.file:
+    src: ../av-live-scanner-user.service
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/multi-user.target.wants/av-live-scanner-user.service"
+    state: link
+
+- name: Render scanner X session profile into skel
+  ansible.builtin.template:
+    src: scanner-xsession.j2
+    dest: "{{ pxe_client_overlay_root }}/etc/skel/.xsession"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render PXE client debug report helper
+  ansible.builtin.template:
+    src: report-debug-event.sh.j2
+    dest: "{{ pxe_client_overlay_root }}/usr/local/bin/report-debug-event.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render PXE client boot debug report service
+  ansible.builtin.template:
+    src: av-debug-report.service.j2
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/av-debug-report.service"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable PXE client boot debug report service
+  ansible.builtin.file:
+    src: ../av-debug-report.service
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/multi-user.target.wants/av-debug-report.service"
+    state: link
+
+- name: Render PXE client runtime debug capture helper
+  ansible.builtin.template:
+    src: capture-runtime-debug.py.j2
+    dest: "{{ pxe_client_overlay_root }}/usr/local/bin/capture-runtime-debug.py"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render PXE client runtime debug capture service
+  ansible.builtin.template:
+    src: av-runtime-debug-capture.service.j2
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/av-runtime-debug-capture.service"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable PXE client runtime debug capture service
+  ansible.builtin.file:
+    src: ../av-runtime-debug-capture.service
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/multi-user.target.wants/av-runtime-debug-capture.service"
+    state: link
+
 - name: Render PXE client runtime definition sync script
   ansible.builtin.template:
     src: sync-runtime-definitions.sh.j2
-    dest: "{{ pxe_client_livebuild_root }}/config/includes.chroot/usr/local/bin/sync-runtime-definitions.sh"
+    dest: "{{ pxe_client_overlay_root }}/usr/local/bin/sync-runtime-definitions.sh"
     owner: root
     group: root
     mode: "0755"
@@ -70,7 +267,7 @@
 - name: Render PXE client runtime definition sync service
   ansible.builtin.template:
     src: av-definition-sync.service.j2
-    dest: "{{ pxe_client_livebuild_root }}/config/includes.chroot/etc/systemd/system/av-definition-sync.service"
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/av-definition-sync.service"
     owner: root
     group: root
     mode: "0644"
@@ -78,13 +275,13 @@
 - name: Enable PXE client runtime definition sync service
   ansible.builtin.file:
     src: ../av-definition-sync.service
-    dest: "{{ pxe_client_livebuild_root }}/config/includes.chroot/etc/systemd/system/multi-user.target.wants/av-definition-sync.service"
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/multi-user.target.wants/av-definition-sync.service"
     state: link
 
 - name: Render PXE client source media mount helper
   ansible.builtin.template:
     src: mount-public-media.sh.j2
-    dest: "{{ pxe_client_livebuild_root }}/config/includes.chroot/usr/local/bin/mount-public-media.sh"
+    dest: "{{ pxe_client_overlay_root }}/usr/local/bin/mount-public-media.sh"
     owner: root
     group: root
     mode: "0755"
@@ -92,7 +289,7 @@
 - name: Render PXE client destination media mount helper
   ansible.builtin.template:
     src: mount-approved-media.sh.j2
-    dest: "{{ pxe_client_livebuild_root }}/config/includes.chroot/usr/local/bin/mount-approved-media.sh"
+    dest: "{{ pxe_client_overlay_root }}/usr/local/bin/mount-approved-media.sh"
     owner: root
     group: root
     mode: "0755"
@@ -100,12 +297,81 @@
 - name: Render offline scan wrapper
   ansible.builtin.template:
     src: offline-scan.sh.j2
-    dest: "{{ pxe_client_livebuild_root }}/config/includes.chroot/usr/local/bin/offline-scan.sh"
+    dest: "{{ pxe_client_overlay_root }}/usr/local/bin/offline-scan.sh"
     owner: root
     group: root
     mode: "0755"
 
-- name: Render live-build config helper
+- name: Render approved media copy helper
+  ansible.builtin.template:
+    src: copy-approved-media.sh.j2
+    dest: "{{ pxe_client_overlay_root }}/usr/local/bin/copy-approved-media.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render scan summary generator
+  ansible.builtin.copy:
+    src: generate-scan-report.py
+    dest: "{{ pxe_client_overlay_root }}/usr/local/bin/generate-scan-report.py"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render baseline YARA rules
+  ansible.builtin.template:
+    src: offline_rules.yar.j2
+    dest: "{{ pxe_client_overlay_root }}{{ pxe_client_yara_rules_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render baseline YARA metadata
+  ansible.builtin.template:
+    src: offline_rules.meta.json.j2
+    dest: "{{ pxe_client_overlay_root }}{{ pxe_client_yara_rules_metadata_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render staged vendor engine runner
+  ansible.builtin.template:
+    src: run-staged-engine.py.j2
+    dest: "{{ pxe_client_overlay_root }}/usr/local/bin/run-staged-engine.py"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Check for staged vendor bundles on the control node
+  ansible.builtin.stat:
+    path: "{{ pxe_client_vendor_bundle_stage_root }}/{{ item }}"
+  delegate_to: localhost
+  become: false
+  register: pxe_client_vendor_bundle_stage_stats
+  loop:
+    - defender
+    - sophos
+    - bitdefender
+
+- name: Copy staged vendor bundles into the PXE overlay
+  ansible.builtin.copy:
+    src: "{{ pxe_client_vendor_bundle_stage_root }}/{{ item.item }}/"
+    dest: "{{ pxe_client_overlay_root }}{{ pxe_client_vendor_bundle_root }}/{{ item.item }}/"
+    owner: root
+    group: root
+    mode: preserve
+  when: item.stat.exists and item.stat.isdir
+  loop: "{{ pxe_client_vendor_bundle_stage_stats.results }}"
+
+- name: Render PXE client remaster configuration helper
+  ansible.builtin.template:
+    src: av-pxe-remaster-configure.sh.j2
+    dest: "{{ pxe_client_overlay_root }}/usr/local/sbin/av-pxe-remaster-configure.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render live ISO remaster helper
   ansible.builtin.template:
     src: build-pxe-client-image.sh.j2
     dest: "{{ pxe_client_output_dir }}/build-pxe-client-image.sh"
@@ -140,15 +406,13 @@
 - name: Build and publish PXE client assets
   when: pxe_client_build_now | bool
   block:
-    - name: Sync ClamAV definitions from proxy into live-build tree
+    - name: Sync ClamAV definitions from proxy into remaster overlay
       ansible.builtin.command: "{{ pxe_client_output_dir }}/sync-clamav-from-proxy.sh"
       register: pxe_client_sync_result
       changed_when: "'Fetched' in pxe_client_sync_result.stdout"
 
-    - name: Build PXE client live image
+    - name: Build remastered PXE client desktop ISO
       ansible.builtin.command: "{{ pxe_client_output_dir }}/build-pxe-client-image.sh"
-      args:
-        chdir: "{{ pxe_client_livebuild_root }}"
       register: pxe_client_build_result
       changed_when: true
 
@@ -161,9 +425,9 @@
       ansible.builtin.stat:
         path: "{{ item }}"
       loop:
+        - "{{ pxe_client_output_iso }}"
         - "{{ pxe_client_publish_dir }}/vmlinuz"
         - "{{ pxe_client_publish_dir }}/initrd"
-        - "{{ pxe_client_publish_dir }}/filesystem.squashfs"
       register: pxe_client_asset_stats
 
     - name: Assert published PXE client assets are present

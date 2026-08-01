@@ -1,34 +1,143 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WORKSPACE="{{ pxe_client_livebuild_root }}"
-OUTPUT="{{ pxe_client_output_dir }}"
-CASPER_DIR="$WORKSPACE/binary/casper"
+BASE_ISO="{{ pxe_client_upstream_iso }}"
+WORKSPACE="{{ pxe_client_remaster_root }}"
+EXTRACT_ROOT="{{ pxe_client_remaster_extract_root }}"
+EDIT_ROOT="{{ pxe_client_remaster_edit_root }}"
+OVERLAY_ROOT="{{ pxe_client_overlay_root }}"
+OUTPUT_ISO="{{ pxe_client_output_iso }}"
+SOURCE_SQUASHFS="{{ pxe_client_remaster_source_squashfs }}"
+SOURCE_SIZE_FILE="${SOURCE_SQUASHFS%.squashfs}.size"
+SQUASH_COMP="{{ pxe_client_squashfs_compressor }}"
+SQUASH_LEVEL="{{ pxe_client_squashfs_compression_level }}"
+SQUASH_PROCS="{{ pxe_client_squashfs_processors }}"
+cleanup() {
+  for mountpoint in "$EDIT_ROOT/dev/pts" "$EDIT_ROOT/dev" "$EDIT_ROOT/proc" "$EDIT_ROOT/sys"; do
+    if mountpoint -q "$mountpoint"; then
+      umount "$mountpoint"
+    fi
+  done
+}
 
-cd "$WORKSPACE"
-lb clean --purge || true
+trap cleanup EXIT
 
-lb config \
-  --mode ubuntu \
-  --architectures amd64 \
-  --binary-images netboot \
-  --bootloader syslinux \
-  --debian-installer false \
-  --distribution "{{ ubuntu_codename }}" \
-  --archive-areas "main universe" \
-  --linux-flavours generic \
-  --memtest none \
-  --syslinux-theme live-build \
-  --bootappend-live "boot=casper components username={{ pxe_client_username }} hostname={{ pxe_client_hostname }}"
+cleanup
+rm -rf "$EXTRACT_ROOT" "$EDIT_ROOT"
+mkdir -p "$EXTRACT_ROOT" "$EDIT_ROOT"
 
-if ! lb build; then
-  if [[ -f "$CASPER_DIR/filesystem.squashfs" ]] && compgen -G "$CASPER_DIR/vmlinuz-*" > /dev/null && compgen -G "$CASPER_DIR/initrd.img-*" > /dev/null; then
-    echo "lb build exited non-zero after generating the PXE client payload."
-    echo "Continuing because kernel, initrd, and squashfs are present and PXE bootloader packaging is managed separately."
-  else
-    exit 1
-  fi
+xorriso -osirrox on -indev "$BASE_ISO" -extract / "$EXTRACT_ROOT" >/dev/null 2>&1
+unsquashfs -processors "$SQUASH_PROCS" -force -d "$EDIT_ROOT" "$EXTRACT_ROOT/casper/$SOURCE_SQUASHFS" >/dev/null
+cp -a "$OVERLAY_ROOT/." "$EDIT_ROOT/"
+
+mkdir -p "$EDIT_ROOT/dev/pts" "$EDIT_ROOT/proc" "$EDIT_ROOT/sys"
+cp /etc/resolv.conf "$EDIT_ROOT/etc/resolv.conf"
+mkdir -p "$EDIT_ROOT/etc/apt/sources.list.d"
+rm -f \
+  "$EDIT_ROOT/etc/apt/sources.list.d/ubuntu.sources" \
+  "$EDIT_ROOT/etc/apt/sources.list.d/cdrom.sources" \
+  "$EDIT_ROOT/etc/apt/sources.list.d/av-pxe.sources"
+if [[ -f "$EDIT_ROOT/etc/apt/sources.list" ]]; then
+  sed -i '/^deb cdrom:/d' "$EDIT_ROOT/etc/apt/sources.list"
 fi
+cat >"$EDIT_ROOT/etc/apt/sources.list.d/av-pxe.sources" <<'EOF'
+Types: deb
+URIs: http://archive.ubuntu.com/ubuntu/
+Suites: {{ ubuntu_codename }} {{ ubuntu_codename }}-updates {{ ubuntu_codename }}-backports
+Components: main universe multiverse restricted
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 
-echo "Live image build completed under $WORKSPACE"
-echo "Publish with: sudo $OUTPUT/publish-pxe-client-assets.sh"
+Types: deb
+URIs: http://security.ubuntu.com/ubuntu/
+Suites: {{ ubuntu_codename }}-security
+Components: main universe multiverse restricted
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+EOF
+mount --bind /dev "$EDIT_ROOT/dev"
+mount --bind /dev/pts "$EDIT_ROOT/dev/pts"
+mount -t proc proc "$EDIT_ROOT/proc"
+mount -t sysfs sys "$EDIT_ROOT/sys"
+
+chroot "$EDIT_ROOT" apt-get update
+DEBIAN_FRONTEND=noninteractive chroot "$EDIT_ROOT" apt-get install -y \
+  -o Dpkg::Options::=--force-confdef \
+  -o Dpkg::Options::=--force-confold \
+  {{ pxe_client_packages | join(' ') }}
+chroot "$EDIT_ROOT" /usr/local/sbin/av-pxe-remaster-configure.sh
+chroot "$EDIT_ROOT" apt-get clean
+rm -rf "$EDIT_ROOT/var/lib/apt/lists/"*
+
+cleanup
+
+rm -f "$EXTRACT_ROOT/casper/$SOURCE_SQUASHFS"
+mksquashfs \
+  "$EDIT_ROOT" \
+  "$EXTRACT_ROOT/casper/$SOURCE_SQUASHFS" \
+  -comp "$SQUASH_COMP" \
+  -Xcompression-level "$SQUASH_LEVEL" \
+  -processors "$SQUASH_PROCS" \
+  -b 1M \
+  -noappend \
+  >/dev/null
+du -sx --block-size=1 "$EDIT_ROOT" | awk '{print $1}' > "$EXTRACT_ROOT/casper/$SOURCE_SIZE_FILE"
+
+# Ubuntu's casper initrd still expects layered source names from the stock
+# desktop media. Provide compatibility aliases that point to the remastered
+# single-layer squashfs so toram boots can proceed without rewriting initrd.
+ln -sf "$SOURCE_SQUASHFS" "$EXTRACT_ROOT/casper/minimal.standard.live.squashfs"
+ln -sf "$SOURCE_SQUASHFS" "$EXTRACT_ROOT/casper/minimal.standard.squashfs"
+ln -sf "$SOURCE_SIZE_FILE" "$EXTRACT_ROOT/casper/minimal.standard.live.size"
+ln -sf "$SOURCE_SIZE_FILE" "$EXTRACT_ROOT/casper/minimal.standard.size"
+
+# PXE toram only needs one live payload, the kernel/initrd, and boot metadata.
+# Prune installer package pools and alternate casper variants so the fetched ISO
+# is small enough to copy into RAM during network boot.
+find "$EXTRACT_ROOT/casper" -maxdepth 1 -type f \
+  ! -name "$SOURCE_SQUASHFS" \
+  ! -name "$SOURCE_SIZE_FILE" \
+  ! -name "vmlinuz" \
+  ! -name "initrd" \
+  -delete
+rm -rf \
+  "$EXTRACT_ROOT/pool" \
+  "$EXTRACT_ROOT/dists" \
+  "$EXTRACT_ROOT/install" \
+  "$EXTRACT_ROOT/preseed"
+find "$EXTRACT_ROOT" -mindepth 1 -maxdepth 1 -type d \
+  \( -name ".disk" -o -name "boot" -o -name "casper" -o -name "EFI" \) -prune -o \
+  \( -type d -exec rm -rf {} + \)
+
+(
+  cd "$EXTRACT_ROOT"
+  find . -path ./md5sum.txt -prune -o -type f -print0 \
+    | xargs -0 md5sum \
+    | sed 's#  \./#  #' > md5sum.txt
+)
+
+xorriso -as mkisofs \
+  -r \
+  -V 'Ubuntu 26.04 amd64' \
+  --modification-date='2026042302185100' \
+  --grub2-mbr --interval:local_fs:0s-15s:zero_mbrpt,zero_gpt:"$BASE_ISO" \
+  --protective-msdos-label \
+  -partition_cyl_align off \
+  -partition_offset 16 \
+  --mbr-force-bootable \
+  -append_partition 2 28732ac11ff8d211ba4b00a0c93ec93b --interval:local_fs:12721412d-12731707d::"$BASE_ISO" \
+  -appended_part_as_gpt \
+  -iso_mbr_part_type a2a0d0ebe5b9334487c068b6b72699c7 \
+  -c /boot.catalog \
+  -b /boot/grub/i386-pc/eltorito.img \
+  -no-emul-boot \
+  -boot-load-size 4 \
+  -boot-info-table \
+  --grub2-boot-info \
+  -eltorito-alt-boot \
+  -e '--interval:appended_partition_2_start_3180353s_size_10296d:all::' \
+  -no-emul-boot \
+  -boot-load-size 10296 \
+  -o "$OUTPUT_ISO" \
+  "$EXTRACT_ROOT" >/dev/null
+
+echo "Remastered desktop ISO created at $OUTPUT_ISO"
+echo "Publish with: sudo {{ pxe_client_output_dir }}/publish-pxe-client-assets.sh"
