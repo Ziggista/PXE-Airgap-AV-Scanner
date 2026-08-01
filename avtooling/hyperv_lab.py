@@ -174,13 +174,17 @@ def validate_prerequisites(repo_root: Path, private_key: Path) -> None:
         )
 
 
-def build_seed_isos(repo_root: Path, output_root: Path = DEFAULT_CLOUDINIT_OUTPUT) -> dict[str, Path]:
+def build_seed_isos(
+    repo_root: Path,
+    run_id: str,
+    output_root: Path = DEFAULT_CLOUDINIT_OUTPUT,
+) -> dict[str, Path]:
     seeds: dict[str, Path] = {}
     for seed_name in ("control-node", "repo-vm", "build-vm"):
         source_dir = repo_root / "cloudinit" / seed_name
         if not source_dir.exists():
             raise HyperVLabError(f"Missing cloud-init seed directory: {source_dir}")
-        output_iso = output_root / f"{seed_name}-seed.iso"
+        output_iso = output_root / f"{seed_name}-seed-{run_id}.iso"
         build_cloudinit_iso(source_dir, output_iso)
         seeds[seed_name] = output_iso
     return seeds
@@ -424,10 +428,11 @@ def main() -> None:
     repo_root = Path(args.repo_root).resolve()
     private_key = Path(args.private_key).resolve()
     active_root = Path(args.active_root).resolve()
+    run_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
 
     validate_prerequisites(repo_root, private_key)
     ensure_switch()
-    seeds = build_seed_isos(repo_root)
+    seeds = build_seed_isos(repo_root, run_id)
     all_vm_names = [spec.name for spec in SERVER_SPECS] + [PXE_TEST_SPEC.name]
     rotated = {} if args.skip_rotate else rotate_existing_vms(all_vm_names)
     create_fresh_vms(active_root, seeds)
