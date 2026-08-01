@@ -377,7 +377,7 @@ def deploy_from_control_node(
         [
             f"cd {_remote_shell_quote(remote_repo_root)}",
             "sudo cloud-init status --wait --long",
-            "./scripts/bootstrap-ansible.sh",
+            "bash ./scripts/bootstrap-ansible.sh",
             "ansible-playbook -i inventories/lab/hosts.yml playbooks/control-node.yml",
             "ansible-playbook -i inventories/lab/hosts.yml playbooks/repo-vm.yml",
             "ansible-playbook -i inventories/lab/hosts.yml playbooks/build-vm.yml",
