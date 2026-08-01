@@ -24,6 +24,18 @@
     - av_management_dns_servers is defined
   notify: Apply management netplan
 
+- name: Remove default cloud-init DHCP netplan when static management is defined
+  ansible.builtin.file:
+    path: /etc/netplan/50-cloud-init.yaml
+    state: absent
+  when:
+    - av_management_interface is defined
+    - av_management_interface_mac is defined
+    - av_management_address is defined
+    - av_management_gateway is defined
+    - av_management_dns_servers is defined
+  notify: Apply management netplan
+
 - name: Apply management netplan before continuing
   ansible.builtin.meta: flush_handlers
   when:
