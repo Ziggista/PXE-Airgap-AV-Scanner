@@ -40,9 +40,19 @@ ansible-playbook playbooks/control-node.yml
 
 ## Notes
 
-- Inventory values are placeholders and must be updated for the actual lab network.
+- The tracked lab inventory now expects fixed management addresses and fixed Hyper-V MAC assignments for the control, proxy, and build VMs.
 - The `control_node` path assumes the control node can reach official Ubuntu repositories on the internet.
 - Non-Ubuntu apt repositories are blocked by default and must be explicitly approved by setting `control_node_allow_third_party_repos: true` and populating `control_node_extra_apt_repositories`.
 - The `repo_vm` role sets up the basis for an `aptly` + `nginx` repository VM.
 - The `build_vm` role sets up the basis for a PXE/TFTP build VM.
 - The `pxe_client_image` role currently prepares packages and wrapper scripts, not a complete bootable live image.
+
+## Windows-side orchestration
+
+The repo also carries the Hyper-V orchestration helper used to rotate the existing lab and stand up a fresh control/proxy/build/PXE-test set:
+
+```powershell
+python .\tools\rebuild_hyperv_lab.py
+```
+
+This is the preferred rebuildability path for the local Windows lab.

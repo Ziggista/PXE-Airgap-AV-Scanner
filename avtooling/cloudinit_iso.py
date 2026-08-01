@@ -17,6 +17,7 @@ def build_cloudinit_iso(source_dir: Path, output_iso: Path, volume_label: str = 
 
     meta_data = source_dir / "meta-data"
     user_data = source_dir / "user-data"
+    network_config = source_dir / "network-config"
     if not meta_data.exists() or not user_data.exists():
         raise FileNotFoundError(
             f"{source_dir} must contain both 'meta-data' and 'user-data' files."
@@ -46,6 +47,13 @@ def build_cloudinit_iso(source_dir: Path, output_iso: Path, volume_label: str = 
         rr_name="user-data",
         joliet_path="/user-data",
     )
+    if network_config.exists():
+        iso.add_file(
+            str(network_config),
+            iso_path=_iso_name(network_config.name),
+            rr_name="network-config",
+            joliet_path="/network-config",
+        )
 
     iso.write(str(output_iso))
     iso.close()

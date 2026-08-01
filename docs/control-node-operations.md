@@ -47,7 +47,15 @@ python .\tools\update_local_repo.py
 
 ## Hyper-V inventory refresh
 
-The lab inventory uses Hyper-V `Default Switch` addresses for the control, proxy, and build VMs. Those management IPs can change after a guest reboot, host reboot, or storage move.
+The preferred lab path now seeds the control, proxy, and build VMs with static management addresses from first boot by shipping `network-config` in the cloud-init ISO.
+
+Expected management addresses:
+
+- `av-control-node`: `172.23.23.27`
+- `av-repo-vm`: `172.23.27.229`
+- `av-build-vm`: `172.23.30.254`
+
+If an older lab instance was created before that static seed support existed, or if a VM was rebuilt outside the tracked workflow, use the inventory refresh helper to discover the current Hyper-V `Default Switch` address and patch [inventories/lab/hosts.yml](C:/Users/Ziggi/AV/inventories/lab/hosts.yml):
 
 Use the local helper before Ansible runs if a lab VM becomes unreachable:
 
@@ -56,4 +64,18 @@ python .\tools\refresh_hyperv_inventory.py --check
 python .\tools\refresh_hyperv_inventory.py
 ```
 
-As of Friday, July 31, 2026, the build VM moved from `172.23.25.109` to `172.23.30.254` after a restart following its VHDX relocation from `D:` to `C:`.
+## Full lab rebuild
+
+For a clean Hyper-V rebuild from the tracked repo, use:
+
+```powershell
+python .\tools\rebuild_hyperv_lab.py
+```
+
+This workflow:
+
+- rotates the existing lab VMs by renaming them with an `.old.<timestamp>` suffix
+- rebuilds the `cidata` seed ISOs for `control-node`, `repo-vm`, and `build-vm`
+- recreates fresh Hyper-V VMs with fixed MAC addresses and static first-boot management networking
+- deploys the control node, proxy node, PXE build node, PXE assets, and healthchecks from a clean clone on the control node
+- starts a fresh `av-pxe-uefi-test-vm` and verifies that the PXE DHCP reservation stays on `192.168.50.184`

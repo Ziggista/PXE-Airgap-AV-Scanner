@@ -24,6 +24,8 @@ C:\Users\Ziggi\AppData\Local\Python\pythoncore-3.14-64\python.exe `
   --output-iso D:\AV\cloudinit\control-node-seed.iso
 ```
 
+The cloud-init seed now also includes `network-config`, so the control node comes up on its static management address from first boot instead of depending on a temporary DHCP lease.
+
 ## Current assumptions
 
 - Ubuntu 26.04 LTS cloud image
@@ -54,3 +56,4 @@ Rotate the seeded password immediately after the install completes.
 ## Reference
 
 - Full host-side command history and rebuild steps: [docs/control-node-build-runbook.md](C:/Users/Ziggi/AV/docs/control-node-build-runbook.md)
+- Full lab rebuild helper: [tools/rebuild_hyperv_lab.py](C:/Users/Ziggi/AV/tools/rebuild_hyperv_lab.py)
