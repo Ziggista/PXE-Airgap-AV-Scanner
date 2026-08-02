@@ -1,0 +1,13 @@
+[Unit]
+Description=Apply PXE client SELinux mode
+After=local-fs.target systemd-tmpfiles-setup.service dbus.service{% if pxe_client_test_mode %}
+After=ssh.service{% endif %}
+Before=av-network-enforcer.service av-live-scanner-user.service av-definition-sync.service av-approved-copy-broker.path av-kiosk-x.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/apply-selinux-mode.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

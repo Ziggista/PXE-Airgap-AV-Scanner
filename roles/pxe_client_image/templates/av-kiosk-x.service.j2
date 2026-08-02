@@ -1,6 +1,6 @@
 [Unit]
 Description=Start the PXE AV kiosk X session on tty1
-After=av-live-scanner-user.service systemd-user-sessions.service
+After=av-live-scanner-user.service systemd-user-sessions.service dbus.service systemd-logind.service
 Wants=av-live-scanner-user.service
 Conflicts=getty@tty1.service
 

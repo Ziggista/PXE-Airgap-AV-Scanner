@@ -1,0 +1,11 @@
+[Unit]
+Description=Repeat PXE client runtime debug capture while test-mode validation is active
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=15s
+Unit=av-runtime-debug-capture.service
+
+[Install]
+WantedBy=timers.target

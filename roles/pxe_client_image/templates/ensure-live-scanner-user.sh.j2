@@ -12,11 +12,22 @@ if ! id -u "${scanner_user}" >/dev/null 2>&1; then
   useradd \
     -m \
     -k /etc/skel \
-    -s /bin/bash \
+    -s /usr/sbin/nologin \
     -g "${scanner_user}" \
-    -G adm,audio,cdrom,dialout,dip,floppy,netdev,plugdev,sudo,video \
+    -G audio,video,input,render \
     "${scanner_user}"
 fi
+current_shell="$(getent passwd "${scanner_user}" | cut -d: -f7)"
+current_groups="$(id -nG "${scanner_user}" 2>/dev/null || true)"
+if [[ "${current_shell}" != "/usr/sbin/nologin" ]] \
+  || [[ " ${current_groups} " != *" audio "* ]] \
+  || [[ " ${current_groups} " != *" video "* ]] \
+  || [[ " ${current_groups} " != *" input "* ]] \
+  || [[ " ${current_groups} " != *" render "* ]]; then
+  usermod -s /usr/sbin/nologin -G audio,video,input,render "${scanner_user}"
+fi
+chage -I -1 -m 0 -M 99999 -E -1 "${scanner_user}" 2>/dev/null || true
+passwd -l "${scanner_user}" 2>/dev/null || true
 
 install -d -m 0700 -o "${scanner_user}" -g "${scanner_user}" \
   "${scanner_home}/.config" \
@@ -26,6 +37,7 @@ install -d -m 0700 -o "${scanner_user}" -g "${scanner_user}" \
   "${scanner_home}/.local/state"
 
 install -d -m 0755 -o "${scanner_user}" -g "${scanner_user}" /var/log/av-pxe
+install -d -m 0755 -o "${scanner_user}" -g "${scanner_user}" /var/log/av-pxe/scans
 touch /var/log/av-pxe/session.log /var/log/av-pxe/openbox-autostart.log /var/log/av-pxe/banner.log
 chown "${scanner_user}:${scanner_user}" \
   /var/log/av-pxe/session.log \
@@ -33,6 +45,8 @@ chown "${scanner_user}:${scanner_user}" \
   /var/log/av-pxe/banner.log
 
 install -d -m 0755 -o "${scanner_user}" -g "${scanner_user}" /run/av
+install -d -m 0755 -o "${scanner_user}" -g "${scanner_user}" /run/av-scan
+install -d -m 0730 -o "${scanner_user}" -g "${scanner_user}" /run/av-scan/requests
 rm -f /run/av/banner-ready /run/av/post-splash-network-disabled
 
 if [[ -f /etc/skel/.xsession && ! -f "${scanner_home}/.xsession" ]]; then

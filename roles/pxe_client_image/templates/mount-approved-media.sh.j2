@@ -7,6 +7,11 @@ APPROVAL="/run/av-scan/approved"
 METADATA_DIR="/run/av-scan"
 METADATA_FILE="$METADATA_DIR/destination-media.env"
 
+if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+  echo "mount-approved-media.sh requires root. Use sudo from the scanner desktop session." >&2
+  exit 1
+fi
+
 normalize_fs() {
   case "${1,,}" in
     fuseblk|ntfs)
@@ -33,7 +38,7 @@ if [[ ! -f "$APPROVAL" ]]; then
 fi
 
 mkdir -p "$TARGET"
-mount -o rw,nosuid,nodev "$DEVICE" "$TARGET"
+mount -o rw,nosuid,nodev,noexec "$DEVICE" "$TARGET"
 mkdir -p "$METADATA_DIR"
 
 FS_TYPE="$(findmnt -n -o FSTYPE --target "$TARGET" 2>/dev/null || true)"

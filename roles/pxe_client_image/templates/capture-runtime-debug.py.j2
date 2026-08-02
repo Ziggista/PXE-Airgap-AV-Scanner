@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import pwd
 import socket
 import subprocess
 import time
@@ -48,6 +49,56 @@ def run_command(command: list[str]) -> str:
     return "\n".join(pieces).strip()
 
 
+def current_username() -> str:
+    try:
+        return pwd.getpwuid(os.geteuid()).pw_name
+    except Exception:
+        return str(os.geteuid())
+
+
+def is_root() -> bool:
+    return os.geteuid() == 0
+
+
+def boot_uptime_seconds() -> float:
+    try:
+        return float(Path("/proc/uptime").read_text(encoding="utf-8").split()[0])
+    except Exception:
+        return 0.0
+
+
+def selinux_mode() -> str:
+    try:
+        return Path("/sys/fs/selinux/enforce").read_text(encoding="utf-8").strip()
+    except Exception:
+        return ""
+
+
+def selinux_is_enforcing() -> bool:
+    return selinux_mode() == "1"
+
+
+def systemd_unit_exists(unit: str) -> bool:
+    completed = subprocess.run(
+        ["systemctl", "list-unit-files", unit, "--no-legend", "--no-pager"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if completed.returncode != 0:
+        return False
+    return unit in completed.stdout
+
+
+def run_unit_journal(unit: str, lines: int = 200) -> str:
+    if not systemd_unit_exists(unit):
+        return f"skipped: unit {unit} is not installed"
+    if selinux_is_enforcing():
+        return f"skipped: journalctl collection for {unit} is disabled while SELinux is enforcing"
+    return run_command(["journalctl", "-b", "-u", unit, "-n", str(lines), "--no-pager"])
+
+
 def main() -> int:
     load_env_file(CONFIG_FILE)
     if os.environ.get("PXE_CLIENT_TEST_MODE") != "1":
@@ -59,101 +110,165 @@ def main() -> int:
     if not base_url:
         return 0
 
-    # Give casper and nodm time to create the live user and launch the session.
-    time.sleep(45)
+    # Give casper and nodm time to create the live user and launch the session,
+    # but avoid delaying every recurring timer invocation after boot.
+    remaining_startup_delay = max(0.0, 45.0 - boot_uptime_seconds())
+    if remaining_startup_delay:
+        time.sleep(remaining_startup_delay)
+
+    root_mode = is_root()
+    execution_identity = current_username()
+
+    snapshot = {
+        "effective_uid": os.geteuid(),
+        "effective_user": execution_identity,
+        "root_mode": root_mode,
+        "who": run_command(["who"]),
+        "loginctl": run_command(["loginctl", "list-sessions", "--no-legend"]),
+        "loginctl_scanner": run_command(["loginctl", "show-user", "{{ pxe_client_username }}"]),
+        "ps_initial_setup": run_command(
+            [
+                "bash",
+                "-lc",
+                "ps -ef | egrep 'initial-setup|ubuntu|casper|gdm|lightdm|nodm|openbox|ibus|xinit|Xorg|av-kiosk' | grep -v egrep",
+            ]
+        ),
+        "xsession_files": run_command(
+            [
+                "bash",
+                "-lc",
+                "ls -lah /usr/share/xsessions /etc/X11/sessions 2>/dev/null",
+            ]
+        ),
+        "accountsservice_scanner": run_command(
+            [
+                "bash",
+                "-lc",
+                "sed -n '1,80p' /var/lib/AccountsService/users/{{ pxe_client_username }}",
+            ]
+        ),
+        "casper_config": run_command(
+            [
+                "bash",
+                "-lc",
+                "sed -n '1,80p' /etc/casper.conf 2>/dev/null",
+            ]
+        ),
+        "network_enforcer_state": run_command(
+            [
+                "bash",
+                "-lc",
+                "sed -n '1,200p' /run/av/network-enforcer-state.json 2>/dev/null",
+            ]
+        ),
+        "lightdm_config": run_command(
+            [
+                "bash",
+                "-lc",
+                "sed -n '1,120p' /etc/lightdm/lightdm.conf.d/20-av-client-autologin.conf 2>/dev/null",
+            ]
+        ),
+        "nodm_config": run_command(
+            [
+                "bash",
+                "-lc",
+                "sed -n '1,120p' /etc/default/nodm 2>/dev/null",
+            ]
+        ),
+        "xorg_log_tail": run_command(
+            [
+                "bash",
+                "-lc",
+                "tail -n 200 /home/{{ pxe_client_username }}/.local/share/xorg/Xorg.0.log 2>/dev/null",
+            ]
+        ),
+        "session_log_tail": run_command(
+            [
+                "bash",
+                "-lc",
+                "tail -n 200 /var/log/av-pxe/session.log 2>/dev/null",
+            ]
+        ),
+        "openbox_log_tail": run_command(
+            [
+                "bash",
+                "-lc",
+                "tail -n 200 /var/log/av-pxe/openbox-autostart.log 2>/dev/null",
+            ]
+        ),
+        "banner_log_tail": run_command(
+            [
+                "bash",
+                "-lc",
+                "tail -n 200 /var/log/av-pxe/banner.log 2>/dev/null",
+            ]
+        ),
+    }
+
+    if root_mode:
+        snapshot.update(
+            {
+                "journal_gdm": run_unit_journal("gdm3"),
+                "journal_lightdm": run_unit_journal("lightdm"),
+                "journal_nodm": run_unit_journal("nodm"),
+                "journal_av_kiosk_x": run_unit_journal("av-kiosk-x.service"),
+                "journal_definition_sync": run_unit_journal("av-definition-sync.service", 100),
+                "journal_network_enforcer": run_unit_journal("av-network-enforcer.service"),
+                "journal_apparmor_policy": run_unit_journal("av-apparmor-policy.service"),
+                "journal_selinux_policy": run_unit_journal("av-selinux-policy.service"),
+                "journal_ssh": run_unit_journal("ssh.service"),
+                "ssh_status": run_command(["systemctl", "status", "ssh.service", "--no-pager", "--full"]),
+                "sshd_test": run_command(["sshd", "-t"]),
+                "sshd_effective_config": run_command(["sshd", "-T"]),
+                "sshd_processes": run_command(["bash", "-lc", "ps -ef | grep '[s]shd'"]),
+                "ssh_runtime_dir": run_command(["bash", "-lc", "ls -lahZ /run/sshd /etc/ssh 2>/dev/null || ls -lah /run/sshd /etc/ssh 2>/dev/null"]),
+                "ssh_host_keys": run_command(["bash", "-lc", "ls -lahZ /etc/ssh/ssh_host_* 2>/dev/null || ls -lah /etc/ssh/ssh_host_* 2>/dev/null"]),
+                "ssh_authorized_keys": run_command(["bash", "-lc", "ls -lahZ /home/{{ pxe_client_admin_username }}/.ssh /home/{{ pxe_client_admin_username }}/.ssh/authorized_keys 2>/dev/null || ls -lah /home/{{ pxe_client_admin_username }}/.ssh /home/{{ pxe_client_admin_username }}/.ssh/authorized_keys 2>/dev/null"]),
+                "ssh_account_state": run_command(["bash", "-lc", "getent passwd {{ pxe_client_admin_username }}; getent group {{ pxe_client_admin_username }}; ls -ldZ /home/{{ pxe_client_admin_username }} /home/{{ pxe_client_admin_username }}/.ssh 2>/dev/null || ls -ld /home/{{ pxe_client_admin_username }} /home/{{ pxe_client_admin_username }}/.ssh 2>/dev/null"]),
+                "sshd_config": run_command(["bash", "-lc", "sed -n '1,220p' /etc/ssh/sshd_config 2>/dev/null"]),
+                "sshd_config_snippets": run_command(["bash", "-lc", "for file in /etc/ssh/sshd_config.d/*.conf; do echo \"### $file\"; sed -n '1,200p' \"$file\"; done 2>/dev/null"]),
+                "auth_log_tail": run_command(["bash", "-lc", "tail -n 200 /var/log/auth.log 2>/dev/null || tail -n 200 /var/log/secure 2>/dev/null"]),
+                "apparmor_status": run_command(["apparmor_status"]),
+                "sestatus": run_command(["sestatus"]),
+                "getenforce": run_command(["getenforce"]),
+                "selinux_avc": run_command(["bash", "-lc", "ausearch -m AVC,USER_AVC -ts boot 2>/dev/null | tail -n 300"]),
+                "journal_graphical_errors": (
+                    "skipped: broad journalctl capture is disabled while SELinux is enforcing"
+                    if selinux_is_enforcing()
+                    else run_command(
+                        [
+                            "bash",
+                            "-lc",
+                            "journalctl -b --no-pager | egrep 'initial-setup|ubuntu|casper|gdm|lightdm|nodm|openbox|ibus|apport|whoopsie|xinit|Xorg|av-kiosk|apparmor|audit|av-network-enforcer|ssh|sshd' | tail -n 400",
+                        ]
+                    )
+                ),
+            }
+        )
+    else:
+        snapshot.update(
+            {
+                "journal_privileged": "skipped: session snapshot is running without root privileges",
+                "apparmor_status": "skipped: session snapshot is running without root privileges",
+                "sestatus": "skipped: session snapshot is running without root privileges",
+                "getenforce": "skipped: session snapshot is running without root privileges",
+                "selinux_avc": "skipped: session snapshot is running without root privileges",
+                "journal_graphical_errors": run_command(
+                    [
+                        "bash",
+                        "-lc",
+                        "journalctl --user --no-pager 2>/dev/null | tail -n 200",
+                    ]
+                ),
+            }
+        )
 
     payload = {
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "hostname": socket.gethostname(),
         "event": "runtime-debug-snapshot",
         "detail": "Captured runtime desktop state after kiosk session startup.",
-        "snapshot": {
-            "who": run_command(["who"]),
-            "loginctl": run_command(["loginctl", "list-sessions", "--no-legend"]),
-            "loginctl_scanner": run_command(["loginctl", "show-user", "{{ pxe_client_username }}"]),
-            "ps_initial_setup": run_command(
-                [
-                    "bash",
-                    "-lc",
-                    "ps -ef | egrep 'initial-setup|ubuntu|casper|gdm|lightdm|nodm|openbox|ibus|xinit|Xorg|av-kiosk' | grep -v egrep",
-                ]
-            ),
-            "xsession_files": run_command(
-                [
-                    "bash",
-                    "-lc",
-                    "ls -lah /usr/share/xsessions /etc/X11/sessions 2>/dev/null",
-                ]
-            ),
-            "accountsservice_scanner": run_command(
-                [
-                    "bash",
-                    "-lc",
-                    "sed -n '1,80p' /var/lib/AccountsService/users/{{ pxe_client_username }}",
-                ]
-            ),
-            "casper_config": run_command(
-                [
-                    "bash",
-                    "-lc",
-                    "sed -n '1,80p' /etc/casper.conf 2>/dev/null",
-                ]
-            ),
-            "journal_gdm": run_command(["journalctl", "-b", "-u", "gdm3", "-n", "200", "--no-pager"]),
-            "journal_lightdm": run_command(["journalctl", "-b", "-u", "lightdm", "-n", "200", "--no-pager"]),
-            "journal_nodm": run_command(["journalctl", "-b", "-u", "nodm", "-n", "200", "--no-pager"]),
-            "journal_av_kiosk_x": run_command(["journalctl", "-b", "-u", "av-kiosk-x.service", "-n", "200", "--no-pager"]),
-            "journal_definition_sync": run_command(["journalctl", "-b", "-u", "av-definition-sync.service", "-n", "100", "--no-pager"]),
-            "lightdm_config": run_command(
-                [
-                    "bash",
-                    "-lc",
-                    "sed -n '1,120p' /etc/lightdm/lightdm.conf.d/20-av-client-autologin.conf 2>/dev/null",
-                ]
-            ),
-            "nodm_config": run_command(
-                [
-                    "bash",
-                    "-lc",
-                    "sed -n '1,120p' /etc/default/nodm 2>/dev/null",
-                ]
-            ),
-            "journal_graphical_errors": run_command(
-                [
-                    "bash",
-                    "-lc",
-                    "journalctl -b --no-pager | egrep 'initial-setup|ubuntu|casper|gdm|lightdm|nodm|openbox|ibus|apport|whoopsie|xinit|Xorg|av-kiosk' | tail -n 300",
-                ]
-            ),
-            "xorg_log_tail": run_command(
-                [
-                    "bash",
-                    "-lc",
-                    "tail -n 200 /home/{{ pxe_client_username }}/.local/share/xorg/Xorg.0.log 2>/dev/null",
-                ]
-            ),
-            "session_log_tail": run_command(
-                [
-                    "bash",
-                    "-lc",
-                    "tail -n 200 /var/log/av-pxe/session.log 2>/dev/null",
-                ]
-            ),
-            "openbox_log_tail": run_command(
-                [
-                    "bash",
-                    "-lc",
-                    "tail -n 200 /var/log/av-pxe/openbox-autostart.log 2>/dev/null",
-                ]
-            ),
-            "banner_log_tail": run_command(
-                [
-                    "bash",
-                    "-lc",
-                    "tail -n 200 /var/log/av-pxe/banner.log 2>/dev/null",
-                ]
-            ),
-        },
+        "snapshot": snapshot,
     }
 
     data = json.dumps(payload).encode("utf-8")

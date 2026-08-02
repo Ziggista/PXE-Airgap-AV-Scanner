@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+import subprocess
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+CONFIG_FILE = Path("/etc/av-pxe/client.env")
+STATE_FILE = Path("/run/av/network-enforcer-state.json")
+POST_SPLASH_LOCK = Path("/run/av/post-splash-network-disabled")
+LOG_FILE = Path("/var/log/av-pxe/network-enforcer.log")
+
+
+def load_env_file(path: Path) -> dict[str, str]:
+    data: dict[str, str] = {}
+    if not path.exists():
+        return data
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        data[key] = value
+    return data
+
+
+def log(message: str) -> None:
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with LOG_FILE.open("a", encoding="utf-8") as handle:
+        handle.write(f"[{timestamp}] {message}\n")
+
+
+def run(command: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(command, capture_output=True, text=True, check=False, timeout=20)
+
+
+def network_exposed() -> bool:
+    for iface_path in sorted(Path("/sys/class/net").iterdir()):
+        iface = iface_path.name
+        if iface == "lo":
+            continue
+        try:
+            operstate = (iface_path / "operstate").read_text(encoding="utf-8").strip().lower()
+        except Exception:
+            operstate = ""
+        try:
+            carrier = (iface_path / "carrier").read_text(encoding="utf-8").strip()
+        except Exception:
+            carrier = ""
+        if operstate == "up" or carrier == "1":
+            return True
+    try:
+        route_lines = Path("/proc/net/route").read_text(encoding="utf-8").splitlines()[1:]
+    except Exception:
+        route_lines = []
+    for line in route_lines:
+        fields = line.split()
+        if len(fields) >= 2 and fields[0] != "lo" and fields[1] == "00000000":
+            return True
+    try:
+        ipv6_route_lines = Path("/proc/net/ipv6_route").read_text(encoding="utf-8").splitlines()
+    except Exception:
+        ipv6_route_lines = []
+    for line in ipv6_route_lines:
+        fields = line.split()
+        if len(fields) >= 10 and fields[9] != "lo" and fields[0] == ("0" * 32):
+            return True
+    return False
+
+
+def removable_media_present() -> bool:
+    result = run(["lsblk", "-J", "-o", "PATH,TYPE,RM,HOTPLUG,TRAN,MOUNTPOINT"])
+    if result.returncode != 0 or not result.stdout.strip():
+        return False
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return False
+
+    def walk(devices: list[dict[str, object]]) -> bool:
+        for device in devices:
+            dev_type = str(device.get("type", ""))
+            rm = str(device.get("rm", "0"))
+            hotplug = str(device.get("hotplug", "0"))
+            transport = str(device.get("tran", "")).lower()
+            mountpoint = str(device.get("mountpoint", "") or "")
+            if dev_type in {"disk", "part"} and (rm == "1" or hotplug == "1" or transport == "usb"):
+                return True
+            if mountpoint.startswith("/mnt/public-media") or mountpoint.startswith("/mnt/approved-media"):
+                return True
+            children = device.get("children")
+            if isinstance(children, list) and walk(children):
+                return True
+        return False
+
+    devices = payload.get("blockdevices")
+    return walk(devices if isinstance(devices, list) else [])
+
+
+def disable_network() -> None:
+    result = run(["/usr/local/bin/disable-network-access.sh"])
+    if result.returncode != 0:
+        error = (result.stderr or result.stdout or "").strip()
+        log(f"network disable helper returned {result.returncode}: {error}")
+
+
+def write_state(state: dict[str, object]) -> None:
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    STATE_FILE.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+
+
+def main() -> int:
+    env = load_env_file(CONFIG_FILE)
+    interval = int(env.get("PXE_CLIENT_NETWORK_ENFORCER_INTERVAL_SECONDS", "{{ pxe_client_network_enforcer_interval_seconds }}"))
+    test_mode = env.get("PXE_CLIENT_TEST_MODE", "0") == "1"
+    allow_post_splash_debug = env.get("PXE_CLIENT_ALLOW_POST_SPLASH_DEBUG", "0") == "1"
+    disable_at_splash = env.get("PXE_CLIENT_DISABLE_NETWORK_AT_SPLASH", "1") == "1"
+    lock_on_media_insert = env.get("PXE_CLIENT_NETWORK_ENFORCER_LOCK_ON_MEDIA_INSERT", "1") == "1"
+
+    log(
+        "network enforcer starting "
+        f"(interval={interval}s test_mode={int(test_mode)} allow_post_splash_debug={int(allow_post_splash_debug)})"
+    )
+    last_action = "initial"
+
+    while True:
+        post_splash = POST_SPLASH_LOCK.exists()
+        media_present = removable_media_present()
+        should_enforce = (disable_at_splash and post_splash) or (lock_on_media_insert and media_present)
+        bypass_for_debug = test_mode and allow_post_splash_debug
+        network_up = network_exposed()
+
+        state = {
+            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "post_splash_lock": post_splash,
+            "media_present": media_present,
+            "should_enforce": should_enforce,
+            "network_exposed": network_up,
+            "test_mode": test_mode,
+            "allow_post_splash_debug": allow_post_splash_debug,
+            "action": "none",
+        }
+
+        if should_enforce:
+            if bypass_for_debug:
+                state["action"] = "debug-bypass"
+                if last_action != state["action"]:
+                    log("debug bypass active; network would have been forced down")
+            else:
+                if network_up:
+                    disable_network()
+                    state["action"] = "enforced"
+                else:
+                    state["action"] = "already-enforced"
+
+        if state["action"] != last_action and state["action"] not in {"enforced", "debug-bypass"}:
+            log(f"network enforcer state changed to {state['action']}")
+
+        write_state(state)
+        last_action = state["action"]
+        time.sleep(max(interval, 1))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

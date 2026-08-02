@@ -117,8 +117,18 @@ class Banner(Gtk.Window):
         self.set_decorated(False)
         self.fullscreen()
 
-        screen = Gdk.Screen.get_default()
-        screen_width = screen.get_width() if screen else 1280
+        screen_width = 1280
+        display = Gdk.Display.get_default()
+        if display:
+            monitor = display.get_primary_monitor() or display.get_monitor(0)
+            if monitor:
+                geometry = monitor.get_geometry()
+                if geometry and geometry.width > 0:
+                    screen_width = geometry.width
+        else:
+            screen = Gdk.Screen.get_default()
+            if screen:
+                screen_width = screen.get_width()
         header_size = 24000 if screen_width >= 1600 else 20000 if screen_width >= 1200 else 17000
         body_size = 13000 if screen_width >= 1600 else 12000
         max_width = min(max(screen_width - 120, 760), 1320)
@@ -284,8 +294,8 @@ class Banner(Gtk.Window):
                 + html.escape(engine_message)
             )
         self.engine_freshness.set_markup(
-            "<span size='12000'><b>Engine freshness:</b><br>"
-            + "<br>".join(engine_parts)
+            "<span size='12000'><b>Engine freshness:</b>\n"
+            + "\n".join(engine_parts)
             + "</span>"
         )
         self.network_status.set_markup("<span foreground='#555753' size='12000'><b>Offline link state:</b> Network isolation check has not run yet for this refresh cycle.</span>")

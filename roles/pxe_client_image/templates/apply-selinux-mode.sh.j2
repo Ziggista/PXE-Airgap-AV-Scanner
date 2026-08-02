@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONFIG_FILE="/etc/av-pxe/client.env"
+LOG_FILE="/var/log/av-pxe/selinux-mode.log"
+SCANNER_USER="{{ pxe_client_username }}"
+
+if [[ -f "$CONFIG_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$CONFIG_FILE"
+fi
+
+if [[ "${PXE_CLIENT_MAC_FRAMEWORK:-apparmor}" != "selinux" ]]; then
+  exit 0
+fi
+
+mkdir -p /var/log/av-pxe
+
+log() {
+  printf '[%s] %s\n' "$(date -Iseconds)" "$1" >>"$LOG_FILE"
+}
+
+set_permissive_first() {
+  if command -v setenforce >/dev/null 2>&1; then
+    setenforce 0 >/dev/null 2>&1 || true
+  fi
+}
+
+load_selinux_policy() {
+  if command -v load_policy >/dev/null 2>&1; then
+    load_policy -i >/dev/null 2>&1 || true
+  fi
+}
+
+restore_tree() {
+  local target="$1"
+
+  if [[ ! -e "$target" ]] || ! command -v restorecon >/dev/null 2>&1; then
+    return 0
+  fi
+
+  restorecon -RF "$target" >/dev/null 2>&1 || true
+}
+
+relabel_critical_paths() {
+  local targets=(
+    /etc
+    /usr
+    /bin
+    /sbin
+    /lib
+    /lib64
+    /var
+    /run
+    /opt
+    /home
+    /root
+    /mnt
+    /dev/input
+    /dev/dri
+    /dev/tty1
+    /dev/ttyS0
+  )
+  local target
+
+  for target in "${targets[@]}"; do
+    restore_tree "$target"
+  done
+}
+
+ensure_fcontext() {
+  local target="$1"
+  local type="$2"
+
+  if ! command -v semanage >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if semanage fcontext -l | awk '{print $1 " " $3}' | grep -Fq "$target $type"; then
+    return 0
+  fi
+
+  semanage fcontext -a -t "$type" "$target" || semanage fcontext -m -t "$type" "$target" || true
+}
+
+apply_contexts() {
+  install -d -m 0755 /run/av /run/av-scan /run/av-scan/requests
+  install -d -m 0755 /run/sshd
+  install -d -m 0755 /var/log/av-pxe /var/log/av-pxe/scans
+  install -d -m 0755 /mnt/public-media /mnt/approved-media /opt/av/selinux
+
+  chown -R "$SCANNER_USER:$SCANNER_USER" /run/av-scan /var/log/av-pxe/scans || true
+  chown -R "$SCANNER_USER:$SCANNER_USER" /var/log/av-pxe || true
+
+  ensure_fcontext '/run/av(/.*)?' var_run_t
+  ensure_fcontext '/run/av-scan(/.*)?' var_run_t
+  ensure_fcontext '/var/log/av-pxe(/.*)?' var_log_t
+  ensure_fcontext '/mnt/public-media(/.*)?' mnt_t
+  ensure_fcontext '/mnt/approved-media(/.*)?' mnt_t
+  ensure_fcontext '/opt/av(/.*)?' usr_t
+  ensure_fcontext '/run/sshd(/.*)?' sshd_var_run_t
+
+  restore_tree /run/av
+  restore_tree /run/av-scan
+  restore_tree /run/sshd
+  restore_tree /var/log/av-pxe
+  restore_tree /mnt/public-media
+  restore_tree /mnt/approved-media
+  restore_tree /opt/av
+  restore_tree /etc/ssh
+  restore_tree "/home/{{ pxe_client_admin_username }}/.ssh"
+  restore_tree "/home/{{ pxe_client_username }}/.ssh"
+  restore_tree /root/.ssh
+}
+
+log "applying SELinux mode ${PXE_CLIENT_SELINUX_MODE:-permissive}"
+set_permissive_first
+load_selinux_policy
+relabel_critical_paths
+apply_contexts
+
+if command -v setenforce >/dev/null 2>&1; then
+  if [[ "${PXE_CLIENT_SELINUX_MODE:-permissive}" == "enforcing" ]]; then
+    setenforce 1 >/dev/null 2>&1 || true
+  else
+    setenforce 0 >/dev/null 2>&1 || true
+  fi
+fi
+
+if command -v getenforce >/dev/null 2>&1; then
+  log "getenforce=$(getenforce || true)"
+fi
+
+if command -v sestatus >/dev/null 2>&1; then
+  sestatus >>"$LOG_FILE" 2>&1 || true
+fi

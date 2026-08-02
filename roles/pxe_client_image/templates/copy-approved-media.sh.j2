@@ -8,6 +8,11 @@ APPROVAL_FILE="$APPROVAL_DIR/approved"
 LATEST_RUN_FILE="$APPROVAL_DIR/latest-run.env"
 DESTINATION_MEDIA_METADATA="$APPROVAL_DIR/destination-media.env"
 
+if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+  echo "copy-approved-media.sh requires root. Use sudo from the scanner desktop session." >&2
+  exit 1
+fi
+
 if [[ ! -f "$APPROVAL_FILE" ]]; then
   echo "Writable destination media is blocked until offline scans complete successfully." >&2
   exit 1

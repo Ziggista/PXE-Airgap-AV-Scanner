@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONFIG_FILE="/etc/av-pxe/client.env"
+PROFILE="/etc/apparmor.d/usr.local.sbin.av-network-enforcer.py"
+
+if [[ -f "$CONFIG_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$CONFIG_FILE"
+fi
+
+if [[ "${PXE_CLIENT_MAC_FRAMEWORK:-apparmor}" != "apparmor" ]]; then
+  exit 0
+fi
+
+if ! command -v apparmor_parser >/dev/null 2>&1; then
+  exit 0
+fi
+
+if [[ ! -f "$PROFILE" ]]; then
+  exit 0
+fi
+
+apparmor_parser -r "$PROFILE"
+
+if command -v aa-complain >/dev/null 2>&1 && command -v aa-enforce >/dev/null 2>&1; then
+  if [[ "${PXE_CLIENT_APPARMOR_MODE:-enforce}" == "complain" ]]; then
+    aa-complain /usr/local/sbin/av-network-enforcer.py || true
+  else
+    aa-enforce /usr/local/sbin/av-network-enforcer.py || true
+  fi
+fi

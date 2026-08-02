@@ -1,0 +1,31 @@
+#include <tunables/global>
+
+/usr/local/sbin/av-network-enforcer.py flags=(attach_disconnected) {
+  #include <abstractions/base>
+  #include <abstractions/python>
+
+  capability net_admin,
+  capability net_raw,
+
+  network,
+
+  /etc/av-pxe/client.env r,
+  /run/av/** rwk,
+  /usr/bin/ip ixr,
+  /usr/bin/lsblk ixr,
+  /usr/bin/python3 ixr,
+  /usr/bin/systemctl ixr,
+  /usr/bin/nmcli ixr,
+  /usr/local/bin/disable-network-access.sh ixr,
+  /usr/local/sbin/av-network-enforcer.py r,
+  /var/log/av-pxe/** rwk,
+  /proc/** r,
+  /sys/** r,
+  /bin/** rix,
+  /sbin/** rix,
+  /usr/bin/** rix,
+  /usr/sbin/** rix,
+  /lib/** rm,
+  /lib64/** rm,
+  /usr/lib/** rm,
+}

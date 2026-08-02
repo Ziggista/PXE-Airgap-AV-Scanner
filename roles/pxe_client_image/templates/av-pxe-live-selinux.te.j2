@@ -1,0 +1,170 @@
+module av_pxe_live 1.0;
+
+require {
+	type auditd_log_t;
+	type auditd_t;
+	type chkpwd_t;
+	type cron_spool_t;
+	type etc_runtime_t;
+	type etc_t;
+	type getty_t;
+	type ifconfig_t;
+	type init_runtime_t;
+	type locale_t;
+	type loadkeys_t;
+	type plymouth_t;
+	type power_profilesd_t;
+	type setfiles_t;
+	type system_dbusd_t;
+	type systemd_networkd_var_lib_t;
+	type systemd_binfmt_t;
+	type systemd_generator_t;
+	type systemd_journal_init_t;
+	type systemd_logind_t;
+	type systemd_resolved_t;
+	type systemd_sysctl_t;
+	type systemd_sysusers_t;
+	type systemd_tmpfiles_t;
+	type NetworkManager_t;
+	type mount_t;
+	type nsfs_t;
+	type switcheroo_t;
+	type systemd_modules_load_t;
+	type syslogd_t;
+	type tcsd_var_lib_t;
+	type udev_t;
+	type unlabeled_t;
+	type urandom_device_t;
+	type usr_t;
+	type uuidd_var_lib_t;
+	type consolesetup_t;
+	type bin_t;
+	type kernel_t;
+	type security_t;
+	type sshd_t;
+	type ssh_home_t;
+	type tmpfs_t;
+	type user_home_dir_t;
+	type var_log_t;
+	type var_run_t;
+	class file { append create getattr ioctl lock map open read unlink watch write };
+	class chr_file { open read };
+	class dir { add_name create getattr open read relabelfrom relabelto remove_name search setattr watch write };
+	class lnk_file { getattr read relabelfrom relabelto setattr };
+	class filesystem getattr;
+	class fd use;
+	class netlink_audit_socket { create nlmsg_relay read write };
+	class capability audit_write;
+	class process getsched;
+}
+
+# Current boot-time AVC set captured from the PXE live image in permissive mode.
+# Keep this policy scoped to early boot helper domains only; scan and copy paths
+# should continue to rely on standard labels plus service ownership fixes.
+
+allow consolesetup_t kernel_t:fd use;
+allow consolesetup_t self:process getsched;
+allow consolesetup_t tmpfs_t:dir { getattr open read search };
+allow consolesetup_t urandom_device_t:chr_file { open read };
+allow consolesetup_t var_run_t:file { create getattr ioctl open read unlink write };
+
+allow loadkeys_t kernel_t:fd use;
+allow loadkeys_t tmpfs_t:dir search;
+
+allow plymouth_t kernel_t:fd use;
+allow plymouth_t tmpfs_t:dir search;
+
+allow mount_t kernel_t:fd use;
+allow mount_t tmpfs_t:file { open read };
+
+allow getty_t tmpfs_t:dir search;
+
+allow ifconfig_t tmpfs_t:dir search;
+allow ifconfig_t kernel_t:fd use;
+allow ifconfig_t tmpfs_t:file { getattr open read };
+
+allow chkpwd_t kernel_t:fd use;
+allow chkpwd_t tmpfs_t:file read;
+
+allow sshd_t kernel_t:fd use;
+allow sshd_t tmpfs_t:file { getattr map open read };
+
+allow syslogd_t unlabeled_t:filesystem getattr;
+allow syslogd_t tmpfs_t:dir { getattr search };
+
+allow auditd_t kernel_t:fd use;
+allow auditd_t var_run_t:dir create;
+allow auditd_t tmpfs_t:file read;
+
+allow chkpwd_t kernel_t:fd use;
+allow chkpwd_t tmpfs_t:file { open read };
+
+allow systemd_binfmt_t kernel_t:fd use;
+allow systemd_binfmt_t tmpfs_t:dir { getattr search };
+allow systemd_binfmt_t locale_t:dir { getattr open read search };
+allow systemd_binfmt_t locale_t:file { getattr map open read };
+
+allow systemd_generator_t init_runtime_t:file unlink;
+allow systemd_generator_t usr_t:file { open read };
+allow systemd_generator_t var_run_t:dir { add_name create };
+allow systemd_generator_t var_run_t:file { append create open write };
+
+allow system_dbusd_t kernel_t:fd use;
+allow system_dbusd_t tmpfs_t:file read;
+
+allow systemd_journal_init_t kernel_t:fd use;
+allow systemd_journal_init_t tmpfs_t:dir { getattr search };
+allow systemd_journal_init_t tmpfs_t:file { open read };
+allow systemd_journal_init_t etc_runtime_t:file read;
+allow systemd_journal_init_t etc_t:file { getattr open read };
+allow systemd_journal_init_t var_log_t:dir search;
+allow systemd_journal_init_t var_log_t:file { getattr ioctl open write };
+
+allow systemd_modules_load_t kernel_t:fd use;
+
+allow systemd_resolved_t tmpfs_t:dir { read watch };
+allow systemd_resolved_t kernel_t:fd use;
+allow systemd_resolved_t system_dbusd_t:fd use;
+allow systemd_resolved_t NetworkManager_t:file { getattr ioctl open read };
+allow systemd_resolved_t locale_t:dir { getattr open read search };
+allow systemd_resolved_t locale_t:file { getattr map open read };
+allow systemd_resolved_t unlabeled_t:filesystem getattr;
+
+allow systemd_logind_t kernel_t:fd use;
+
+allow switcheroo_t tmpfs_t:dir { getattr search };
+
+allow systemd_tmpfiles_t kernel_t:fd use;
+allow systemd_tmpfiles_t bin_t:dir search;
+allow systemd_tmpfiles_t bin_t:lnk_file { getattr read relabelfrom relabelto };
+allow systemd_tmpfiles_t cron_spool_t:dir { relabelfrom relabelto search };
+allow systemd_tmpfiles_t locale_t:file { map open read };
+allow systemd_tmpfiles_t auditd_log_t:dir { relabelfrom relabelto };
+allow systemd_tmpfiles_t security_t:lnk_file { getattr read };
+allow systemd_tmpfiles_t security_t:lnk_file setattr;
+allow systemd_tmpfiles_t ssh_home_t:dir { relabelfrom relabelto };
+allow systemd_tmpfiles_t systemd_networkd_var_lib_t:dir { relabelfrom relabelto };
+allow systemd_tmpfiles_t tcsd_var_lib_t:dir { relabelfrom relabelto };
+allow systemd_tmpfiles_t tmpfs_t:dir setattr;
+allow systemd_tmpfiles_t tmpfs_t:file { getattr open read };
+allow systemd_tmpfiles_t user_home_dir_t:dir { relabelfrom relabelto };
+allow systemd_tmpfiles_t uuidd_var_lib_t:dir { relabelfrom relabelto };
+
+allow udev_t nsfs_t:file { open read };
+allow udev_t unlabeled_t:filesystem getattr;
+
+allow systemd_sysctl_t kernel_t:fd use;
+allow systemd_sysctl_t locale_t:dir { getattr open read search };
+allow systemd_sysctl_t locale_t:file { getattr map open read };
+
+allow systemd_sysusers_t kernel_t:fd use;
+allow systemd_sysusers_t self:capability audit_write;
+allow systemd_sysusers_t self:netlink_audit_socket { create nlmsg_relay read write };
+allow systemd_sysusers_t locale_t:dir { getattr open read search };
+allow systemd_sysusers_t locale_t:file { getattr map open read };
+allow systemd_sysusers_t tmpfs_t:dir { add_name read remove_name write };
+allow systemd_sysusers_t tmpfs_t:file { create getattr lock open read unlink write };
+
+allow setfiles_t tmpfs_t:file { append read };
+
+allow power_profilesd_t tmpfs_t:dir search;

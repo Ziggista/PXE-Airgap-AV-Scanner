@@ -58,7 +58,11 @@ This workspace prepares a PXE-booted Ubuntu live client that:
 - The desktop splash reports on the freshness of the definitions baked into the image; it no longer represents a live network signature download step
 - The current production scan path is intentionally limited to `ClamAV` and the bundled `YARA` rule set. Commercial engine placeholders remain out of the operator path until real licensed bundles are staged.
 - The client now PXE boots with `netboot=url` and `toram`, so the live media is copied into RAM instead of keeping the root filesystem on NFS
-- The kiosk session attempts to shut down all non-loopback networking before the red splash is shown
+- `av-network-enforcer.service` is the root-owned watchdog that checks every `{{ pxe_client_network_enforcer_interval_seconds }}` seconds and forces non-loopback networking down once the splash is active or removable media is present
+- In test builds with `pxe_client_allow_post_splash_debug: true`, the daemon logs the would-be enforcement state but leaves networking up for debug capture
+- The scanner desktop user is intentionally a non-login kiosk account, not a general `sudo` user
+- Source and destination media are mounted `noexec,nosuid,nodev`
+- Final media copy is requested through `/usr/local/bin/request-approved-copy.sh` and executed by a root-owned broker service after re-validating the scan approval state
 - The remaster process prunes Ubuntu installer pools and unused `casper` variants from the published ISO so the `toram` download fits into lab RAM budgets
 - The login session launches `/usr/local/bin/av-network-banner.py`
 - Source media should be mounted with:
@@ -67,12 +71,12 @@ This workspace prepares a PXE-booted Ubuntu live client that:
 
 - Offline scans should be run with:
 
-  `sudo /usr/local/bin/offline-scan.sh /mnt/public-media /mnt/approved-media`
+  `/usr/local/bin/offline-scan.sh /mnt/public-media /mnt/approved-media`
 
 - After an approved scan, mount the writable destination media and copy with:
 
   `sudo /usr/local/bin/mount-approved-media.sh /dev/sdY1 /mnt/approved-media`
-  `sudo /usr/local/bin/copy-approved-media.sh /mnt/public-media /mnt/approved-media`
+  `/usr/local/bin/request-approved-copy.sh`
 
 - Each scan creates:
 
@@ -91,7 +95,10 @@ This workspace prepares a PXE-booted Ubuntu live client that:
 
 - `pxe_client_test_mode: true` acts as the development `-test` build flag.
 - In test mode the client enables `sshd` for the `{{ pxe_client_admin_username }}` user and is allowed to POST early boot and definition-staging events back to `{{ pxe_client_debug_report_base_url }}`.
+- In SELinux mode the live client disables `cloud-init`, masks the `cloud-init-generator` and `systemd-ssh-generator`, labels the PXE runtime paths it owns, and loads the bundled `av_pxe_live` boot policy module before switching to `{{ pxe_client_selinux_mode }}`.
 - Once the kiosk splash appears, post-splash debug callbacks are disabled unless `pxe_client_allow_post_splash_debug: true` is set.
+- AppArmor is placed in `{{ pxe_client_apparmor_mode }}` mode. Recommended practice is `complain` for test builds and `enforce` for production images.
+- When `pxe_client_mandatory_access_control: selinux`, the client boots with SELinux kernel arguments and uses `{{ pxe_client_selinux_mode }}` mode. Recommended practice is `permissive` for test builds and `enforcing` for production images.
 - Set `pxe_client_test_mode: false` for the production airgapped build so those debug call-backs are omitted.
 
 ## Daily rebuild policy

@@ -34,7 +34,7 @@ mkdir -p "$LOG_DIR" /run/av
           echo "[$(date -Iseconds)] preserving network because post-splash debug is enabled"
           /usr/local/bin/report-debug-event.sh splash-debug-hold "Keeping network online for debug-enabled validation boot." || true
         else
-          sudo /usr/local/bin/disable-network-access.sh >>"$LOG_FILE" 2>&1 || true
+          echo "[$(date -Iseconds)] awaiting av-network-enforcer.service to hold networking down"
         fi
       fi
       exit 0

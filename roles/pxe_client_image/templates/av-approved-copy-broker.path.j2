@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for approved media copy requests
+
+[Path]
+PathExists=/run/av-scan/requests/copy.request
+Unit=av-approved-copy-broker.service
+
+[Install]
+WantedBy=multi-user.target

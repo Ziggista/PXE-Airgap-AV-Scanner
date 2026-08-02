@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APPROVAL_DIR="/run/av-scan"
+APPROVAL_FILE="$APPROVAL_DIR/approved"
+LATEST_RUN_FILE="$APPROVAL_DIR/latest-run.env"
+REQUEST_DIR="$APPROVAL_DIR/requests"
+REQUEST_FILE="$REQUEST_DIR/copy.request"
+
+if [[ ! -f "$APPROVAL_FILE" ]]; then
+  echo "Writable destination media is blocked until offline scans complete successfully." >&2
+  exit 1
+fi
+
+if [[ ! -f "$LATEST_RUN_FILE" ]]; then
+  echo "No approved scan context was found. Run offline-scan.sh first." >&2
+  exit 1
+fi
+
+# shellcheck disable=SC1090
+source "$LATEST_RUN_FILE"
+
+mkdir -p "$REQUEST_DIR"
+cat > "$REQUEST_FILE" <<EOF
+REQUESTED_BY=$(id -un)
+REQUESTED_AT=$(date -Iseconds)
+SOURCE_PATH=${SOURCE_PATH:-/mnt/public-media}
+DESTINATION_PATH=${DESTINATION_PATH:-/mnt/approved-media}
+RUN_ID=${RUN_ID:-unknown}
+EOF
+
+echo "Approved copy requested. Root broker will validate the request and perform the transfer."

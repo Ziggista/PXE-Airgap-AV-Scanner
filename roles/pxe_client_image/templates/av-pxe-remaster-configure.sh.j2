@@ -11,7 +11,19 @@ if ! id -u "$ADMIN_USER" >/dev/null 2>&1; then
   groupadd -f "$ADMIN_USER"
   useradd -m -s /bin/bash -g "$ADMIN_USER" -G sudo,adm "$ADMIN_USER"
 fi
-passwd -l "$ADMIN_USER" || true
+if [[ "{{ '1' if pxe_client_test_mode else '0' }}" == "1" ]]; then
+  passwd -u "$ADMIN_USER" || true
+  passwd -d "$ADMIN_USER" || true
+else
+  passwd -l "$ADMIN_USER" || true
+fi
+
+if ! getent group sshd >/dev/null 2>&1; then
+  groupadd --system sshd
+fi
+if ! id -u sshd >/dev/null 2>&1; then
+  useradd --system --no-create-home --gid sshd --shell /usr/sbin/nologin sshd
+fi
 
 install -d -m 0700 -o "$ADMIN_USER" -g "$ADMIN_USER" "/home/$ADMIN_USER/.ssh"
 cat >"/home/$ADMIN_USER/.ssh/authorized_keys" <<'EOF'
@@ -33,17 +45,36 @@ Exec=openbox-session
 EOF
 cp -f /etc/X11/sessions/av-client-openbox.desktop /usr/share/xsessions/av-client-openbox.desktop
 
+cat >/etc/X11/Xwrapper.config <<'EOF'
+allowed_users=anybody
+needs_root_rights=yes
+EOF
+
 cat >/etc/sudoers.d/90-ziggi-py <<'EOF'
 {{ pxe_client_admin_username }} ALL=(ALL) NOPASSWD:ALL
 EOF
 chmod 0440 /etc/sudoers.d/90-ziggi-py
 
 cat >/etc/sudoers.d/91-av-scanner <<'EOF'
-{{ pxe_client_username }} ALL=(root) NOPASSWD:/usr/local/bin/mount-public-media.sh,/usr/local/bin/mount-approved-media.sh,/usr/local/bin/offline-scan.sh,/usr/local/bin/copy-approved-media.sh,/usr/local/bin/disable-network-access.sh
+{{ pxe_client_username }} ALL=(root) NOPASSWD:/usr/local/bin/mount-public-media.sh,/usr/local/bin/mount-approved-media.sh
 EOF
 chmod 0440 /etc/sudoers.d/91-av-scanner
 
-install -d -m 0755 /mnt/public-media /mnt/approved-media /run/av-scan /var/log/av-pxe/scans /opt/av/definitions/clamav
+if [[ "{{ pxe_client_mandatory_access_control }}" == "selinux" ]]; then
+  cat >/etc/selinux/config <<'EOF'
+SELINUX={{ pxe_client_selinux_mode }}
+SELINUXTYPE=default
+EOF
+  rm -f /.autorelabel /etc/selinux/.autorelabel || true
+fi
+
+install -d -m 0755 /etc/cloud
+touch /etc/cloud/cloud-init.disabled
+install -d -m 0755 /etc/systemd/system-generators
+ln -sfn /dev/null /etc/systemd/system-generators/cloud-init-generator
+ln -sfn /dev/null /etc/systemd/system-generators/systemd-ssh-generator
+
+install -d -m 0755 /mnt/public-media /mnt/approved-media /run/av-scan /var/log/av-pxe/scans /opt/av/definitions/clamav /opt/av/selinux
 install -d -m 0755 /etc/skel
 install -d -m 0700 /etc/skel/.config /etc/skel/.local/state /etc/skel/.local/share/applications
 touch /etc/skel/.config/gnome-initial-setup-done
@@ -107,6 +138,9 @@ fi
 if dpkg -s ibus-table >/dev/null 2>&1; then
   apt-get purge "${APT_ARGS[@]}" ibus-table || true
 fi
+if dpkg -s unattended-upgrades >/dev/null 2>&1; then
+  apt-get purge "${APT_ARGS[@]}" unattended-upgrades || true
+fi
 for package in {{ pxe_client_remove_packages | join(' ') }}; do
   if dpkg -s "$package" >/dev/null 2>&1; then
     apt-get purge "${APT_ARGS[@]}" "$package" || true
@@ -124,10 +158,35 @@ if [[ -f /etc/default/apport ]]; then
   sed -i 's/^enabled=.*/enabled=0/' /etc/default/apport
 fi
 systemctl disable apport.service apport-autoreport.path whoopsie.service 2>/dev/null || true
+systemctl disable cloud-init.service cloud-init-local.service cloud-config.service cloud-final.service 2>/dev/null || true
+systemctl mask cloud-init.service cloud-init-local.service cloud-config.service cloud-final.service 2>/dev/null || true
+systemctl enable dbus.service dbus.socket systemd-logind.service 2>/dev/null || true
+systemctl disable switcheroo-control.service 2>/dev/null || true
+systemctl mask switcheroo-control.service 2>/dev/null || true
+systemctl mask systemd-hostnamed.service 2>/dev/null || true
+systemctl disable rtkit-daemon.service 2>/dev/null || true
+systemctl mask rtkit-daemon.service 2>/dev/null || true
+systemctl disable apt-daily.service apt-daily.timer apt-daily-upgrade.service apt-daily-upgrade.timer 2>/dev/null || true
+systemctl mask apt-daily.service apt-daily.timer apt-daily-upgrade.service apt-daily-upgrade.timer 2>/dev/null || true
+systemctl disable cups.service cups-browsed.service 2>/dev/null || true
+systemctl mask cups.service cups-browsed.service 2>/dev/null || true
+systemctl disable cron.service anacron.service 2>/dev/null || true
+systemctl mask cron.service anacron.service 2>/dev/null || true
+systemctl disable ModemManager.service 2>/dev/null || true
+systemctl mask ModemManager.service 2>/dev/null || true
+systemctl disable ssh.socket 2>/dev/null || true
+systemctl mask ssh.socket 2>/dev/null || true
+systemctl disable power-profiles-daemon.service 2>/dev/null || true
+systemctl mask power-profiles-daemon.service 2>/dev/null || true
 systemctl disable gdm.service gdm3.service lightdm.service nodm.service display-manager.service 2>/dev/null || true
 systemctl disable getty@tty1.service 2>/dev/null || true
+systemctl disable serial-getty@ttyS0.service 2>/dev/null || true
+systemctl mask serial-getty@ttyS0.service 2>/dev/null || true
 rm -f /etc/systemd/system/display-manager.service /etc/X11/default-display-manager
 rm -f /etc/systemd/system/getty.target.wants/getty@tty1.service
+rm -f /etc/systemd/system/getty.target.wants/serial-getty@ttyS0.service
+ln -sfn /dev/null /etc/systemd/system/serial-getty@ttyS0.service
+rm -f /etc/systemd/system/sockets.target.wants/ssh.socket
 
 rm -f \
   /usr/share/applications/gnome-initial-setup-first-login.desktop \
@@ -167,6 +226,27 @@ rm -f \
   /usr/share/applications/transmission-gtk.desktop \
   /usr/share/applications/usb-creator-gtk.desktop
 
+rm -f \
+  /etc/xdg/autostart/av-network-banner.desktop \
+  /etc/xdg/autostart/at-spi-dbus-bus.desktop \
+  /etc/xdg/autostart/geoclue-demo-agent.desktop \
+  /etc/xdg/autostart/org.gnome.Evolution-alarm-notify.desktop \
+  /etc/xdg/autostart/org.gnome.SettingsDaemon.Sharing.desktop \
+  /etc/xdg/autostart/update-notifier.desktop
+
+rm -f \
+  /etc/xdg/autostart/org.a11y.Bus.desktop \
+  /etc/xdg/autostart/at-spi-dbus-bus.desktop \
+  /etc/xdg/autostart/gnome-keyring-*.desktop \
+  /etc/xdg/autostart/org.gnome.SettingsDaemon.*.desktop
+
+install -d -m 0755 /etc/systemd/user
+ln -sfn /dev/null /etc/systemd/user/pipewire.service
+ln -sfn /dev/null /etc/systemd/user/pipewire.socket
+ln -sfn /dev/null /etc/systemd/user/pipewire-pulse.service
+ln -sfn /dev/null /etc/systemd/user/pipewire-pulse.socket
+ln -sfn /dev/null /etc/systemd/user/wireplumber.service
+
 cat >/etc/dconf/profile/user <<'EOF'
 user-db:user
 system-db:local
@@ -193,4 +273,14 @@ fi
 if [[ "{{ '1' if pxe_client_test_mode else '0' }}" != "1" ]]; then
   rm -f /etc/ssh/ssh_host_*
 fi
+
+if [[ "{{ pxe_client_mandatory_access_control }}" == "selinux" ]]; then
+  if command -v checkmodule >/dev/null 2>&1 && command -v semodule_package >/dev/null 2>&1 && command -v semodule >/dev/null 2>&1; then
+    install -d -m 0755 /run/av/selinux
+    checkmodule -M -m -o /run/av/selinux/av_pxe_live.mod /opt/av/selinux/av_pxe_live.te
+    semodule_package -o /run/av/selinux/av_pxe_live.pp -m /run/av/selinux/av_pxe_live.mod
+    semodule -i /run/av/selinux/av_pxe_live.pp
+  fi
+fi
+
 truncate -s 0 /etc/machine-id

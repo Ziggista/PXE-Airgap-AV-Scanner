@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APPROVAL_DIR="/run/av-scan"
+APPROVAL_FILE="$APPROVAL_DIR/approved"
+LATEST_RUN_FILE="$APPROVAL_DIR/latest-run.env"
+REQUEST_FILE="$APPROVAL_DIR/requests/copy.request"
+DESTINATION_MEDIA_METADATA="$APPROVAL_DIR/destination-media.env"
+LOG_FILE="/var/log/av-pxe/copy-broker.log"
+
+mkdir -p /var/log/av-pxe
+
+{
+  echo "[$(date -Iseconds)] processing approved copy request"
+
+  if [[ ! -f "$REQUEST_FILE" ]]; then
+    echo "request file missing"
+    exit 0
+  fi
+  if [[ ! -f "$APPROVAL_FILE" || ! -f "$LATEST_RUN_FILE" ]]; then
+    echo "approval context missing"
+    rm -f "$REQUEST_FILE"
+    exit 1
+  fi
+
+  # shellcheck disable=SC1090
+  source "$LATEST_RUN_FILE"
+  # shellcheck disable=SC1090
+  source "$REQUEST_FILE"
+
+  EXPECTED_SOURCE="${SOURCE_PATH:-/mnt/public-media}"
+  REQUEST_DEST="${DESTINATION_PATH:-/mnt/approved-media}"
+
+  if [[ -f "$DESTINATION_MEDIA_METADATA" ]]; then
+    # shellcheck disable=SC1090
+    source "$DESTINATION_MEDIA_METADATA"
+    REQUEST_DEST="${TARGET:-$REQUEST_DEST}"
+  fi
+
+  if ! mountpoint -q "$REQUEST_DEST"; then
+    echo "destination path $REQUEST_DEST is not mounted"
+    rm -f "$REQUEST_FILE"
+    exit 1
+  fi
+
+  /usr/local/bin/copy-approved-media.sh "$EXPECTED_SOURCE" "$REQUEST_DEST"
+  rm -f "$REQUEST_FILE"
+} >>"$LOG_FILE" 2>&1

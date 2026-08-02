@@ -32,6 +32,11 @@ if [[ -f /etc/av-pxe/client.env ]]; then
   TEST_MODE="${PXE_CLIENT_TEST_MODE:-0}"
 fi
 
+if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+  echo "offline-scan.sh must run as the unprivileged {{ pxe_client_username }} user, not via sudo." >&2
+  exit 1
+fi
+
 STARTED_AT="$(date -Iseconds)"
 SOURCE_FILESYSTEM="unknown"
 SOURCE_DEVICE="unknown"
@@ -260,4 +265,4 @@ fi
 touch "$APPROVAL_FILE"
 /usr/local/bin/report-debug-event.sh scan-approved "Offline scan approved media transfer for $SOURCE_PATH"
 echo "Offline scan approved. Summary: $REPORT_HTML"
-echo "Mount approved destination media, then run: sudo /usr/local/bin/copy-approved-media.sh \"$SOURCE_PATH\" \"$DESTINATION_PATH\""
+echo "Mount approved destination media, then run: /usr/local/bin/request-approved-copy.sh"

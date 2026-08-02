@@ -1,0 +1,13 @@
+[Unit]
+Description=Enforce PXE client offline networking policy
+After=local-fs.target av-apparmor-policy.service
+Wants=av-apparmor-policy.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/av-network-enforcer.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

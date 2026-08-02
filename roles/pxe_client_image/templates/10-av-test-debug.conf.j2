@@ -1,0 +1,19 @@
+{% if pxe_client_test_mode %}
+# Test-mode debug SSH profile for the RAM client.
+# Keep this path public-key only and avoid PAM session setup so SELinux
+# hardening does not block temporary break-glass access.
+PubkeyAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+ChallengeResponseAuthentication no
+UsePAM no
+PermitRootLogin no
+AllowUsers {{ pxe_client_admin_username }}
+AuthorizedKeysFile .ssh/authorized_keys
+AllowAgentForwarding no
+AllowTcpForwarding no
+X11Forwarding no
+PermitTunnel no
+GatewayPorts no
+LogLevel VERBOSE
+{% endif %}

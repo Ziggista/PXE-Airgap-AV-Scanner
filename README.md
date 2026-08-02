@@ -22,6 +22,7 @@ This repository now includes Ansible-managed control, proxy, and PXE server role
 - `tools/`
   - `acquire_media.py`
   - `bootstrap_local_machine.py`
+  - `install_lab.py`
   - `refresh_hyperv_inventory.py`
   - `stage_upstream_live_iso.py`
   - `update_local_repo.py`
@@ -42,6 +43,7 @@ This repository now includes Ansible-managed control, proxy, and PXE server role
   - Hyper-V deployment notes.
   - APT repository governance for Item 1.
   - Ansible repository layout.
+  - PXE client hardening notes.
 - `runtime/`
   - local cache, manifests, logs, and staged content.
 
@@ -95,6 +97,19 @@ python .\tools\bootstrap_local_machine.py
 python .\tools\update_local_repo.py
 ```
 
+Run the Windows installer wrapper to seed operator settings outside the repo, create the SSH key outside the repo, check local dependencies, and optionally launch the full Hyper-V deployment:
+
+```powershell
+python .\tools\install_lab.py
+```
+
+For a saved-config rerun without prompts:
+
+```powershell
+python .\tools\install_lab.py --non-interactive
+python .\tools\install_lab.py --non-interactive --deploy
+```
+
 Refresh Hyper-V guest IPs in the Ansible lab inventory after a reboot:
 
 ```powershell
@@ -138,5 +153,6 @@ python .\tools\refresh_hyperv_inventory.py --check
 - On Hyper-V `Default Switch`, guest management IPs are not stable across host or guest restarts. Refresh `inventories/lab/hosts.yml` with `tools/refresh_hyperv_inventory.py` before running Ansible if SSH suddenly fails after a reboot.
 - The PXE client should boot an Ubuntu live runtime entirely into RAM, then mount source and destination media as needed.
 - Windows may still be used to acquire vendor media, signatures, and portable scanners before publishing them to the build VM.
+- The Windows installer wrapper stores operator settings under `%LOCALAPPDATA%\PXE-Airgap-AV-Scanner` by default so SSH keys and per-operator config do not live inside the repo.
 - The copy stage is blocked unless every enabled engine returns a success code.
 - AV integrations are command-driven so you can plug in portable/offline scanners without rewriting the orchestration layer.

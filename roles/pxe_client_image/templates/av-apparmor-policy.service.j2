@@ -1,0 +1,14 @@
+[Unit]
+Description=Load PXE client AppArmor policy
+DefaultDependencies=no
+After=local-fs.target
+Before=av-network-enforcer.service
+ConditionPathExists=/usr/local/sbin/apply-apparmor-mode.sh
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/apply-apparmor-mode.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -79,20 +79,30 @@ pxe_client_engine_providers:
     cli_hint: BEST / GravityZone package plus local CLI tooling
     notes: Requires a licensed GravityZone/BEST bundle.
 pxe_client_test_mode: true
-pxe_client_allow_post_splash_debug: false
+pxe_client_allow_post_splash_debug: true
 pxe_client_disable_network_at_splash: true
+pxe_client_network_enforcer_interval_seconds: 10
+pxe_client_network_enforcer_lock_on_media_insert: true
+pxe_client_mandatory_access_control: selinux
+pxe_client_apparmor_mode: "{{ 'complain' if pxe_client_test_mode else 'enforce' }}"
+pxe_client_selinux_mode: "enforcing"
 pxe_client_debug_report_base_url: "{{ pxe_server_client_base_url }}/debug/pxe-client"
 pxe_client_build_now: false
 pxe_client_test_ssh_public_keys:
   - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOmjwNUVLGQIWdKeWAtIo1Kzv2WIx7r97Xz+2lmE2xEl ziggi-py-control-host
 
 pxe_client_packages:
+  - apparmor
+  - apparmor-utils
+  - checkpolicy
   - clamav
   - clamav-freshclam
   - curl
   - dbus-x11
   - exfatprogs
   - gir1.2-gtk-3.0
+  - auditd
+  - dbus
   - nodm
   - ntfs-3g
   - openbox
@@ -104,6 +114,13 @@ pxe_client_packages:
   - dosfstools
   - rsync
   - openssh-server
+  - policycoreutils
+  - policycoreutils-python-utils
+  - selinux-policy-dev
+  - selinux-basics
+  - selinux-policy-default
+  - selinux-utils
+  - setools
   - udisks2
   - usbutils
   - xinit
@@ -138,6 +155,7 @@ pxe_client_remove_packages:
   - rhythmbox
   - shotwell
   - simple-scan
+  - snapd
   - thunderbird
   - totem
   - transmission-gtk

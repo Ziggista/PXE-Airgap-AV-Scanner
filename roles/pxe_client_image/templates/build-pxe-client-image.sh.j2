@@ -73,6 +73,10 @@ DEBIAN_FRONTEND=noninteractive chroot "$EDIT_ROOT" apt-get install -y \
   -o Dpkg::Options::=--force-confold \
   {{ pxe_client_packages | join(' ') }}
 chroot "$EDIT_ROOT" /usr/local/sbin/av-pxe-remaster-configure.sh
+{% if pxe_client_mandatory_access_control == 'selinux' %}
+chroot "$EDIT_ROOT" /bin/bash -lc 'if command -v setfiles >/dev/null 2>&1 && [[ -f /etc/selinux/default/contexts/files/file_contexts ]]; then setfiles -F /etc/selinux/default/contexts/files/file_contexts /; fi'
+chroot "$EDIT_ROOT" /bin/bash -lc 'rm -f /.autorelabel /etc/selinux/.autorelabel || true'
+{% endif %}
 chroot "$EDIT_ROOT" apt-get clean
 rm -rf "$EDIT_ROOT/var/lib/apt/lists/"*
 

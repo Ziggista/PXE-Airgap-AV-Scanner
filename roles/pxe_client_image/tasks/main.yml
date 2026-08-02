@@ -22,6 +22,7 @@
     - "{{ pxe_client_overlay_root }}/etc/default"
     - "{{ pxe_client_overlay_root }}/etc/gdm3"
     - "{{ pxe_client_overlay_root }}/etc/lightdm/lightdm.conf.d"
+    - "{{ pxe_client_overlay_root }}/etc/ssh/sshd_config.d"
     - "{{ pxe_client_overlay_root }}/etc/skel"
     - "{{ pxe_client_overlay_root }}/etc/skel/.config"
     - "{{ pxe_client_overlay_root }}/etc/skel/.local"
@@ -32,11 +33,15 @@
     - "{{ pxe_client_overlay_root }}/etc/xdg/openbox"
     - "{{ pxe_client_overlay_root }}/etc/systemd/system"
     - "{{ pxe_client_overlay_root }}/etc/systemd/system/multi-user.target.wants"
+    - "{{ pxe_client_overlay_root }}/etc/systemd/system/timers.target.wants"
+    - "{{ pxe_client_overlay_root }}/etc/apparmor.d"
+    - "{{ pxe_client_overlay_root }}/etc/selinux"
     - "{{ pxe_client_overlay_root }}/etc/sudoers.d"
     - "{{ pxe_client_overlay_root }}/usr/local/bin"
     - "{{ pxe_client_overlay_root }}/usr/local/sbin"
     - "{{ pxe_client_overlay_root }}/usr/lib/user-setup"
     - "{{ pxe_client_overlay_root }}/opt/av/definitions/clamav"
+    - "{{ pxe_client_overlay_root }}/opt/av/selinux"
     - "{{ pxe_client_overlay_root }}{{ pxe_client_vendor_bundle_root }}"
     - "{{ pxe_client_overlay_root }}{{ pxe_client_vendor_bundle_root }}/defender"
     - "{{ pxe_client_overlay_root }}{{ pxe_client_vendor_bundle_root }}/sophos"
@@ -67,13 +72,10 @@
     group: root
     mode: "0644"
 
-- name: Render PXE client desktop autostart entry
-  ansible.builtin.template:
-    src: av-network-banner.desktop.j2
-    dest: "{{ pxe_client_overlay_root }}/etc/xdg/autostart/av-network-banner.desktop"
-    owner: root
-    group: root
-    mode: "0644"
+- name: Ensure legacy desktop autostart entry is absent
+  ansible.builtin.file:
+    path: "{{ pxe_client_overlay_root }}/etc/xdg/autostart/av-network-banner.desktop"
+    state: absent
 
 - name: Render PXE client network warning app
   ansible.builtin.template:
@@ -87,6 +89,14 @@
   ansible.builtin.template:
     src: av-pxe-client.env.j2
     dest: "{{ pxe_client_overlay_root }}/etc/av-pxe/client.env"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render PXE client test-mode SSH policy
+  ansible.builtin.template:
+    src: 10-av-test-debug.conf.j2
+    dest: "{{ pxe_client_overlay_root }}/etc/ssh/sshd_config.d/10-av-test-debug.conf"
     owner: root
     group: root
     mode: "0644"
@@ -181,6 +191,88 @@
     owner: root
     group: root
     mode: "0755"
+
+- name: Render network enforcement daemon
+  ansible.builtin.template:
+    src: av-network-enforcer.py.j2
+    dest: "{{ pxe_client_overlay_root }}/usr/local/sbin/av-network-enforcer.py"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render network enforcement service
+  ansible.builtin.template:
+    src: av-network-enforcer.service.j2
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/av-network-enforcer.service"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable network enforcement service
+  ansible.builtin.file:
+    src: ../av-network-enforcer.service
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/multi-user.target.wants/av-network-enforcer.service"
+    state: link
+
+- name: Render SELinux policy loader
+  ansible.builtin.template:
+    src: apply-selinux-mode.sh.j2
+    dest: "{{ pxe_client_overlay_root }}/usr/local/sbin/apply-selinux-mode.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render PXE client boot SELinux module source
+  ansible.builtin.template:
+    src: av-pxe-live-selinux.te.j2
+    dest: "{{ pxe_client_overlay_root }}/opt/av/selinux/av_pxe_live.te"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render SELinux policy loader service
+  ansible.builtin.template:
+    src: av-selinux-policy.service.j2
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/av-selinux-policy.service"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable SELinux policy loader service
+  ansible.builtin.file:
+    src: ../av-selinux-policy.service
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/multi-user.target.wants/av-selinux-policy.service"
+    state: link
+
+- name: Render AppArmor policy loader
+  ansible.builtin.template:
+    src: apply-apparmor-mode.sh.j2
+    dest: "{{ pxe_client_overlay_root }}/usr/local/sbin/apply-apparmor-mode.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render AppArmor policy loader service
+  ansible.builtin.template:
+    src: av-apparmor-policy.service.j2
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/av-apparmor-policy.service"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable AppArmor policy loader service
+  ansible.builtin.file:
+    src: ../av-apparmor-policy.service
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/multi-user.target.wants/av-apparmor-policy.service"
+    state: link
+
+- name: Render AppArmor profile for the network enforcer
+  ansible.builtin.template:
+    src: apparmor.av-network-enforcer.py.j2
+    dest: "{{ pxe_client_overlay_root }}/etc/apparmor.d/usr.local.sbin.av-network-enforcer.py"
+    owner: root
+    group: root
+    mode: "0644"
 
 - name: Render Openbox autostart helper
   ansible.builtin.template:
@@ -280,6 +372,20 @@
     dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/multi-user.target.wants/av-runtime-debug-capture.service"
     state: link
 
+- name: Render PXE client runtime debug capture timer
+  ansible.builtin.template:
+    src: av-runtime-debug-capture.timer.j2
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/av-runtime-debug-capture.timer"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable PXE client runtime debug capture timer
+  ansible.builtin.file:
+    src: ../av-runtime-debug-capture.timer
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/timers.target.wants/av-runtime-debug-capture.timer"
+    state: link
+
 - name: Render PXE client runtime definition sync script
   ansible.builtin.template:
     src: sync-runtime-definitions.sh.j2
@@ -333,6 +439,44 @@
     owner: root
     group: root
     mode: "0755"
+
+- name: Render approved media copy request helper
+  ansible.builtin.template:
+    src: request-approved-copy.sh.j2
+    dest: "{{ pxe_client_overlay_root }}/usr/local/bin/request-approved-copy.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render approved media copy broker
+  ansible.builtin.template:
+    src: process-approved-copy-request.sh.j2
+    dest: "{{ pxe_client_overlay_root }}/usr/local/sbin/process-approved-copy-request.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render approved media copy broker service
+  ansible.builtin.template:
+    src: av-approved-copy-broker.service.j2
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/av-approved-copy-broker.service"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render approved media copy broker path
+  ansible.builtin.template:
+    src: av-approved-copy-broker.path.j2
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/av-approved-copy-broker.path"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable approved media copy broker path
+  ansible.builtin.file:
+    src: ../av-approved-copy-broker.path
+    dest: "{{ pxe_client_overlay_root }}/etc/systemd/system/multi-user.target.wants/av-approved-copy-broker.path"
+    state: link
 
 - name: Render scan summary generator
   ansible.builtin.copy:
