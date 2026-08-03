@@ -425,6 +425,8 @@ def deploy_from_control_node(
             f"sudo mkdir -p {_remote_shell_quote(remote_repo_parent)}",
             f"sudo chown ziggi-py:ziggi-py {_remote_shell_quote(remote_repo_parent)}",
             f"git clone --branch {_remote_shell_quote(branch)} {_remote_shell_quote(repo_url)} {_remote_shell_quote(remote_repo_root)}",
+            f"mkdir -p {_remote_shell_quote(f'{remote_repo_root}/runtime/downloads')}",
+            f"mkdir -p {_remote_shell_quote(f'{remote_repo_root}/inventories/lab/group_vars/all')}",
             "mkdir -p ~/.ssh",
         ]
     )
