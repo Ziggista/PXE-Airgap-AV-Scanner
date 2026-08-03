@@ -222,14 +222,22 @@ $ErrorActionPreference = 'Stop'
 $vm = Get-VM -Name '{vm_name}' -ErrorAction SilentlyContinue
 if ($vm) {{
   Stop-VM -Name '{vm_name}' -TurnOff -Force -ErrorAction SilentlyContinue | Out-Null
+  $vm = Get-VM -Name '{vm_name}'
   Rename-VM -VM $vm -NewName '{old_name}'
+  $vm = Get-VM -Name '{old_name}'
 }}
 
 $sourceRoot = '{source_root}'
 $archiveRoot = '{archive_root}'
-if (Test-Path -LiteralPath $sourceRoot) {{
+if ($vm) {{
   if (Test-Path -LiteralPath $archiveRoot) {{
-    Remove-Item -LiteralPath $archiveRoot -Recurse -Force
+    Remove-Item -LiteralPath $archiveRoot -Recurse -Force -ErrorAction Stop
+  }}
+  New-Item -ItemType Directory -Path $archiveRoot -Force | Out-Null
+  Move-VMStorage -VM $vm -DestinationStoragePath $archiveRoot
+}} elseif (Test-Path -LiteralPath $sourceRoot) {{
+  if (Test-Path -LiteralPath $archiveRoot) {{
+    Remove-Item -LiteralPath $archiveRoot -Recurse -Force -ErrorAction Stop
   }}
   Move-Item -LiteralPath $sourceRoot -Destination $archiveRoot
 }}
