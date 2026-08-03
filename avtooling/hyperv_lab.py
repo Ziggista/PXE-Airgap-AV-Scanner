@@ -204,18 +204,33 @@ if (-not (Get-VMSwitch -Name '{switch_name}' -ErrorAction SilentlyContinue)) {{
     _run_powershell(script)
 
 
-def rotate_existing_vms(vm_names: list[str], old_root: Path = DEFAULT_OLD_ROOT) -> dict[str, str]:
+def rotate_existing_vms(
+    vm_names: list[str],
+    old_root: Path = DEFAULT_OLD_ROOT,
+    active_root: Path = DEFAULT_HYPERV_ROOT,
+) -> dict[str, str]:
     timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     renamed: dict[str, str] = {}
     old_root.mkdir(parents=True, exist_ok=True)
     for vm_name in vm_names:
         old_name = f"{vm_name}.old.{timestamp}"
+        source_root = active_root / vm_name
+        archive_root = old_root / old_name
         script = rf"""
 $ErrorActionPreference = 'Stop'
 $vm = Get-VM -Name '{vm_name}' -ErrorAction SilentlyContinue
 if ($vm) {{
   Stop-VM -Name '{vm_name}' -TurnOff -Force -ErrorAction SilentlyContinue | Out-Null
   Rename-VM -VM $vm -NewName '{old_name}'
+}}
+
+$sourceRoot = '{source_root}'
+$archiveRoot = '{archive_root}'
+if (Test-Path -LiteralPath $sourceRoot) {{
+  if (Test-Path -LiteralPath $archiveRoot) {{
+    Remove-Item -LiteralPath $archiveRoot -Recurse -Force
+  }}
+  Move-Item -LiteralPath $sourceRoot -Destination $archiveRoot
 }}
 """
         _run_powershell(script)
@@ -478,7 +493,7 @@ def main() -> None:
     ensure_switch()
     seeds = build_seed_isos(repo_root, run_id)
     all_vm_names = [spec.name for spec in SERVER_SPECS] + [PXE_TEST_SPEC.name]
-    rotated = {} if args.skip_rotate else rotate_existing_vms(all_vm_names)
+    rotated = {} if args.skip_rotate else rotate_existing_vms(all_vm_names, active_root=active_root)
     create_fresh_vms(active_root, seeds)
     start_vms([spec.name for spec in SERVER_SPECS])
 
