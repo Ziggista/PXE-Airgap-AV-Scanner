@@ -411,7 +411,9 @@ def deploy_from_control_node(
     remote_repo_root: str = DEFAULT_REMOTE_REPO_ROOT,
 ) -> None:
     license_file = repo_root / "inventories" / "lab" / "group_vars" / "all" / "license_acceptance.yml"
+    inventory_file = repo_root / "inventories" / "lab" / "hosts.yml"
     remote_license = f"{remote_repo_root}/inventories/lab/group_vars/all/license_acceptance.yml"
+    remote_inventory = f"{remote_repo_root}/inventories/lab/hosts.yml"
     public_key = private_key.with_suffix(".pub")
     upstream_iso = repo_root / "runtime" / "downloads" / "ubuntu-26.04-desktop-amd64.iso"
     remote_upstream_iso = f"{remote_repo_root}/runtime/downloads/{upstream_iso.name}"
@@ -434,6 +436,7 @@ def deploy_from_control_node(
 
     _run(_scp_base(private_key) + [str(private_key), f"ziggi-py@{control_ip}:~/.ssh/ziggi-py-host-ed25519"])
     _run(_scp_base(private_key) + [str(public_key), f"ziggi-py@{control_ip}:~/.ssh/ziggi-py-host-ed25519.pub"])
+    _run(_scp_base(private_key) + [str(inventory_file), f"ziggi-py@{control_ip}:{remote_inventory}"])
     _run(_scp_base(private_key) + [str(license_file), f"ziggi-py@{control_ip}:{remote_license}"])
     _run(_scp_base(private_key) + [str(upstream_iso), f"ziggi-py@{control_ip}:{remote_upstream_iso}"])
 
