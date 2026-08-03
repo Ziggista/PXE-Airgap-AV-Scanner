@@ -249,6 +249,10 @@
     group: root
     mode: "0644"
 
+- name: Flush pending build VM handlers before staged reboot
+  ansible.builtin.meta: flush_handlers
+  when: build_vm_pxe_lab_netplan.changed
+
 - name: Reboot build VM to activate staged PXE netplan safely
   ansible.builtin.shell: |
     nohup bash -c 'sleep 2; systemctl reboot' >/dev/null 2>&1 &
