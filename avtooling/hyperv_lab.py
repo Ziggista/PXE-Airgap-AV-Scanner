@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from avtooling.cloudinit_iso import build_cloudinit_iso
+from avtooling.hyperv_inventory import HyperVInventoryError, discover_vm_addresses, update_inventory_hosts_file
 from avtooling.local_repo import require_command
 
 
@@ -369,16 +370,35 @@ def wait_for_tcp(host: str, port: int, timeout_seconds: int = 600) -> None:
     raise HyperVLabError(f"Timed out waiting for {host}:{port} ({last_error})")
 
 
+def wait_for_inventory_discovery(
+    repo_root: Path,
+    timeout_seconds: int = 900,
+) -> dict[str, str]:
+    deadline = time.time() + timeout_seconds
+    inventory_path = repo_root / "inventories" / "lab" / "hosts.yml"
+    last_error: Exception | None = None
+    while time.time() < deadline:
+        try:
+            addresses = discover_vm_addresses()
+            discovered = {address.inventory_host: address.ip_address for address in addresses}
+            required_hosts = {"av-control-node", "av-repo-vm", "av-build-vm"}
+            if required_hosts.issubset(discovered):
+                update_inventory_hosts_file(inventory_path, addresses)
+                return discovered
+        except HyperVInventoryError as exc:
+            last_error = exc
+        time.sleep(10)
+    raise HyperVLabError(f"Timed out discovering Hyper-V management IPs ({last_error})")
+
+
 def deploy_from_control_node(
     repo_root: Path,
     private_key: Path,
+    control_ip: str,
     repo_url: str = DEFAULT_REPO_URL,
     branch: str = DEFAULT_BRANCH,
     remote_repo_root: str = DEFAULT_REMOTE_REPO_ROOT,
 ) -> None:
-    control_ip = next(spec.management_ip for spec in SERVER_SPECS if spec.name == "av-control-node-26")
-    if not control_ip:
-        raise HyperVLabError("Control node IP is not configured.")
     license_file = repo_root / "inventories" / "lab" / "group_vars" / "all" / "license_acceptance.yml"
     remote_license = f"{remote_repo_root}/inventories/lab/group_vars/all/license_acceptance.yml"
     public_key = private_key.with_suffix(".pub")
@@ -421,10 +441,7 @@ def deploy_from_control_node(
     _run(_ssh_base(private_key) + [f"ziggi-py@{control_ip}", remote_deploy])
 
 
-def verify_pxe_reservation(private_key: Path, timeout_seconds: int = 300) -> str:
-    build_ip = next(spec.management_ip for spec in SERVER_SPECS if spec.name == "av-build-vm")
-    if not build_ip:
-        raise HyperVLabError("Build VM IP is not configured.")
+def verify_pxe_reservation(private_key: Path, build_ip: str, timeout_seconds: int = 300) -> str:
     deadline = time.time() + timeout_seconds
     lease_path = "/var/lib/misc/dnsmasq.leases"
     expected = "192.168.50.184"
@@ -443,26 +460,35 @@ def write_summary(
     repo_root: Path,
     rotated: dict[str, str],
     seeds: dict[str, Path],
+    discovered_ips: dict[str, str],
     lease_snapshot: str,
 ) -> Path:
     docs_dir = repo_root / "docs"
     docs_dir.mkdir(parents=True, exist_ok=True)
-    summary_path = docs_dir / "fresh-lab-rebuild-2026-08-01.md"
+    now = datetime.now(UTC)
+    summary_path = docs_dir / f"fresh-lab-rebuild-{now.strftime('%Y-%m-%d')}.md"
     lines = [
-        "# Fresh Lab Rebuild - August 1, 2026",
+        f"# Fresh Lab Rebuild - {now.strftime('%B')} {now.day}, {now.strftime('%Y')}",
         "",
         "## Actions",
         "",
         "- Rotated the existing Hyper-V lab VMs by renaming them with an `.old.<timestamp>` suffix.",
         "- Rebuilt fresh `cidata` seed ISOs for `control-node`, `repo-vm`, and `build-vm`.",
         "- Created fresh Hyper-V VMs from the Ubuntu 26.04 cloud-image VHDX with fixed MAC addresses.",
-        "- Brought the server VMs up on their static management IPs from first boot via cloud-init `network-config`.",
+        "- Brought the server VMs up on Hyper-V `Default Switch` DHCP, then rediscovered and rewrote the Ansible inventory from their fixed MAC addresses.",
         "- Deployed `control-node`, `repo-vm`, `build-vm`, PXE assets, and healthchecks from a clean clone on the control node.",
         "- Started a fresh `av-pxe-uefi-test-vm` and verified the reserved PXE lease.",
         "",
-        "## Rotated VMs",
+        "## Management IP Discovery",
         "",
     ]
+    for host_name, ip_address in sorted(discovered_ips.items()):
+        lines.append(f"- `{host_name}`: `{ip_address}`")
+    lines.extend([
+        "",
+        "## Rotated VMs",
+        "",
+    ])
     for current_name, old_name in rotated.items():
         lines.append(f"- `{current_name}` -> `{old_name}`")
     lines.extend(["", "## Seed ISOs", ""])
@@ -497,16 +523,22 @@ def main() -> None:
     create_fresh_vms(active_root, seeds)
     start_vms([spec.name for spec in SERVER_SPECS])
 
-    for spec in SERVER_SPECS:
-        if spec.management_ip:
-            wait_for_tcp(spec.management_ip, 22, timeout_seconds=900)
+    discovered_ips = wait_for_inventory_discovery(repo_root)
+    for host_name in ("av-control-node", "av-repo-vm", "av-build-vm"):
+        wait_for_tcp(discovered_ips[host_name], 22, timeout_seconds=900)
 
     if not args.skip_deploy:
-        deploy_from_control_node(repo_root, private_key, repo_url=args.repo_url, branch=args.branch)
+        deploy_from_control_node(
+            repo_root,
+            private_key,
+            control_ip=discovered_ips["av-control-node"],
+            repo_url=args.repo_url,
+            branch=args.branch,
+        )
 
     start_vms([PXE_TEST_SPEC.name])
-    lease_snapshot = verify_pxe_reservation(private_key)
-    summary_path = write_summary(repo_root, rotated, seeds, lease_snapshot)
+    lease_snapshot = verify_pxe_reservation(private_key, build_ip=discovered_ips["av-build-vm"])
+    summary_path = write_summary(repo_root, rotated, seeds, discovered_ips, lease_snapshot)
     print(f"Fresh lab rebuild summary written to: {summary_path}")
 
 

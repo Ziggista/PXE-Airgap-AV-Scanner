@@ -151,7 +151,7 @@ python .\tools\refresh_hyperv_inventory.py --check
 ## Design notes
 
 - The proxy/build services are intended to run inside dedicated Ubuntu VMs on Hyper-V.
-- On Hyper-V `Default Switch`, guest management IPs are not stable across host or guest restarts. Refresh `inventories/lab/hosts.yml` with `tools/refresh_hyperv_inventory.py` before running Ansible if SSH suddenly fails after a reboot.
+- On Hyper-V `Default Switch`, guest management IPs are not stable across host or guest restarts. The tracked rebuild path now rediscovers those DHCP leases automatically from fixed MAC addresses, and `tools/refresh_hyperv_inventory.py` remains the manual recovery path after ad hoc reboots.
 - The PXE client should boot an Ubuntu live runtime entirely into RAM, then mount source and destination media as needed.
 - Windows may still be used to acquire vendor media, signatures, and portable scanners before publishing them to the build VM.
 - The Windows installer wrapper stores operator settings under `%LOCALAPPDATA%\PXE-Airgap-AV-Scanner` by default so SSH keys and per-operator config do not live inside the repo.

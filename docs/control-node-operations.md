@@ -47,15 +47,9 @@ python .\tools\update_local_repo.py
 
 ## Hyper-V inventory refresh
 
-The preferred lab path now seeds the control, proxy, and build VMs with static management addresses from first boot by shipping `network-config` in the cloud-init ISO.
+The tracked Hyper-V lab now treats `Default Switch` as DHCP-only management transport. The server VMs keep fixed MAC addresses, and the repo refreshes `inventories/lab/hosts.yml` from the live Hyper-V neighbor table before deployment.
 
-Expected management addresses:
-
-- `av-control-node`: `172.23.23.27`
-- `av-repo-vm`: `172.23.27.229`
-- `av-build-vm`: `172.23.30.254`
-
-If an older lab instance was created before that static seed support existed, or if a VM was rebuilt outside the tracked workflow, use the inventory refresh helper to discover the current Hyper-V `Default Switch` address and patch [inventories/lab/hosts.yml](C:/Users/Ziggi/AV/inventories/lab/hosts.yml):
+Use the local helper to discover the current `Default Switch` leases and patch [inventories/lab/hosts.yml](C:/Users/Ziggi/AV/inventories/lab/hosts.yml):
 
 Use the local helper before Ansible runs if a lab VM becomes unreachable:
 
@@ -76,7 +70,8 @@ This workflow:
 
 - rotates the existing lab VMs by renaming them with an `.old.<timestamp>` suffix
 - rebuilds the `cidata` seed ISOs for `control-node`, `repo-vm`, and `build-vm`
-- recreates fresh Hyper-V VMs with fixed MAC addresses and static first-boot management networking
+- recreates fresh Hyper-V VMs with fixed MAC addresses and DHCP first-boot management networking on `Default Switch`
+- refreshes the Ansible inventory from the live Hyper-V neighbor table before any SSH/Ansible work starts
 - copies the local automation SSH keypair into the fresh control node so Ansible can reach the proxy and build guests
 - deploys the control node, proxy node, PXE build node, PXE assets, and healthchecks from a clean clone on the control node
 - starts a fresh `av-pxe-uefi-test-vm` and verifies that the PXE DHCP reservation stays on `192.168.50.184`
