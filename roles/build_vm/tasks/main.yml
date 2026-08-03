@@ -43,10 +43,7 @@
     owner: root
     group: root
     mode: "0644"
-  notify: Apply netplan
-
-- name: Apply PXE lab netplan before PXE service changes
-  ansible.builtin.meta: flush_handlers
+  register: build_vm_pxe_lab_netplan
 
 - name: Render dnsmasq configuration
   ansible.builtin.template:
@@ -251,3 +248,12 @@
     owner: root
     group: root
     mode: "0644"
+
+- name: Reboot build VM to activate staged PXE netplan safely
+  ansible.builtin.reboot:
+    msg: "Reboot initiated by Ansible after staging PXE lab network configuration."
+    reboot_timeout: 900
+    connect_timeout: 10
+    post_reboot_delay: 20
+    test_command: whoami
+  when: build_vm_pxe_lab_netplan.changed
