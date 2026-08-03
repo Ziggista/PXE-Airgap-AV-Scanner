@@ -56,7 +56,7 @@ EOF
 chmod 0440 /etc/sudoers.d/90-ziggi-py
 
 cat >/etc/sudoers.d/91-av-scanner <<'EOF'
-{{ pxe_client_username }} ALL=(root) NOPASSWD:/usr/local/bin/mount-public-media.sh,/usr/local/bin/mount-approved-media.sh
+{{ pxe_client_username }} ALL=(root) NOPASSWD:/usr/local/bin/mount-public-media.sh,/usr/local/bin/mount-approved-media.sh,/bin/bash /usr/local/bin/copy-approved-media.sh *
 EOF
 chmod 0440 /etc/sudoers.d/91-av-scanner
 

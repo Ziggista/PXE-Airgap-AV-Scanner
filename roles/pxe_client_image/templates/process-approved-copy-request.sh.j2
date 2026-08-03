@@ -1,32 +1,41 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 APPROVAL_DIR="/run/av-scan"
 APPROVAL_FILE="$APPROVAL_DIR/approved"
 LATEST_RUN_FILE="$APPROVAL_DIR/latest-run.env"
 REQUEST_FILE="$APPROVAL_DIR/requests/copy.request"
+IN_PROGRESS_REQUEST_FILE="$APPROVAL_DIR/requests/copy.request.processing"
+LOCK_FILE="$APPROVAL_DIR/requests/copy-broker.lock"
 DESTINATION_MEDIA_METADATA="$APPROVAL_DIR/destination-media.env"
 LOG_FILE="/var/log/av-pxe/copy-broker.log"
 
 mkdir -p /var/log/av-pxe
 
 {
+  exec 9>"$LOCK_FILE"
+  if ! flock -n 9; then
+    exit 0
+  fi
+
   echo "[$(date -Iseconds)] processing approved copy request"
 
   if [[ ! -f "$REQUEST_FILE" ]]; then
     echo "request file missing"
     exit 0
   fi
+  mv -f "$REQUEST_FILE" "$IN_PROGRESS_REQUEST_FILE"
   if [[ ! -f "$APPROVAL_FILE" || ! -f "$LATEST_RUN_FILE" ]]; then
     echo "approval context missing"
-    rm -f "$REQUEST_FILE"
+    rm -f "$IN_PROGRESS_REQUEST_FILE"
     exit 1
   fi
 
   # shellcheck disable=SC1090
   source "$LATEST_RUN_FILE"
   # shellcheck disable=SC1090
-  source "$REQUEST_FILE"
+  source "$IN_PROGRESS_REQUEST_FILE"
 
   EXPECTED_SOURCE="${SOURCE_PATH:-/mnt/public-media}"
   REQUEST_DEST="${DESTINATION_PATH:-/mnt/approved-media}"
@@ -39,10 +48,30 @@ mkdir -p /var/log/av-pxe
 
   if ! mountpoint -q "$REQUEST_DEST"; then
     echo "destination path $REQUEST_DEST is not mounted"
-    rm -f "$REQUEST_FILE"
+    rm -f "$IN_PROGRESS_REQUEST_FILE"
     exit 1
   fi
 
-  /usr/local/bin/copy-approved-media.sh "$EXPECTED_SOURCE" "$REQUEST_DEST"
-  rm -f "$REQUEST_FILE"
+  case "$EXPECTED_SOURCE" in
+    /mnt/public-media|/mnt/public-media/*)
+      ;;
+    *)
+      echo "source path escaped public-media root: $EXPECTED_SOURCE"
+      rm -f "$IN_PROGRESS_REQUEST_FILE"
+      exit 1
+      ;;
+  esac
+
+  case "$REQUEST_DEST" in
+    /mnt/approved-media|/mnt/approved-media/*)
+      ;;
+    *)
+      echo "destination path escaped approved-media root: $REQUEST_DEST"
+      rm -f "$IN_PROGRESS_REQUEST_FILE"
+      exit 1
+      ;;
+  esac
+
+  /bin/bash /usr/local/bin/copy-approved-media.sh "$EXPECTED_SOURCE" "$REQUEST_DEST"
+  rm -f "$IN_PROGRESS_REQUEST_FILE"
 } >>"$LOG_FILE" 2>&1

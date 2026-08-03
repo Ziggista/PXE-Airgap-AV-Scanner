@@ -25,7 +25,13 @@ if [[ -z "$BASE_URL" ]]; then
   exit 0
 fi
 
-HOSTNAME_VALUE="$(hostname)"
+if [[ -r /proc/sys/kernel/hostname ]]; then
+  HOSTNAME_VALUE="$(tr -d '\n' </proc/sys/kernel/hostname)"
+elif [[ -r /etc/hostname ]]; then
+  HOSTNAME_VALUE="$(head -n 1 /etc/hostname | tr -d '\n')"
+else
+  HOSTNAME_VALUE="unknown"
+fi
 TIMESTAMP="$(date -Iseconds)"
 PAYLOAD=$(printf '{"timestamp":"%s","hostname":"%s","event":"%s","detail":"%s"}' \
   "$TIMESTAMP" \

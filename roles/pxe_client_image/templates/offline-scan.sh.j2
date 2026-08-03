@@ -41,9 +41,13 @@ STARTED_AT="$(date -Iseconds)"
 SOURCE_FILESYSTEM="unknown"
 SOURCE_DEVICE="unknown"
 SOURCE_LABEL="unknown"
+SOURCE_ACCESS_MODE="unknown"
+SOURCE_EXECUTION_POLICY="unknown"
 DESTINATION_FILESYSTEM="unknown"
 DESTINATION_DEVICE="unknown"
 DESTINATION_LABEL="unknown"
+DESTINATION_ACCESS_MODE="unknown"
+DESTINATION_EXECUTION_POLICY="unknown"
 
 if [[ -f "$SOURCE_MEDIA_METADATA" ]]; then
   # shellcheck disable=SC1090
@@ -51,6 +55,8 @@ if [[ -f "$SOURCE_MEDIA_METADATA" ]]; then
   SOURCE_FILESYSTEM="${FILESYSTEM:-unknown}"
   SOURCE_DEVICE="${DEVICE:-unknown}"
   SOURCE_LABEL="${LABEL:-unknown}"
+  SOURCE_ACCESS_MODE="${ACCESS_MODE:-unknown}"
+  SOURCE_EXECUTION_POLICY="${EXECUTION_POLICY:-unknown}"
 fi
 
 if [[ -f "$DESTINATION_MEDIA_METADATA" ]]; then
@@ -59,6 +65,8 @@ if [[ -f "$DESTINATION_MEDIA_METADATA" ]]; then
   DESTINATION_FILESYSTEM="${FILESYSTEM:-unknown}"
   DESTINATION_DEVICE="${DEVICE:-unknown}"
   DESTINATION_LABEL="${LABEL:-unknown}"
+  DESTINATION_ACCESS_MODE="${ACCESS_MODE:-unknown}"
+  DESTINATION_EXECUTION_POLICY="${EXECUTION_POLICY:-unknown}"
 fi
 
 DEFINITION_FRESHNESS_STATE="unknown"
@@ -107,9 +115,13 @@ DESTINATION_PATH=$DESTINATION_PATH
 SOURCE_FILESYSTEM=$SOURCE_FILESYSTEM
 SOURCE_DEVICE=$SOURCE_DEVICE
 SOURCE_LABEL=$SOURCE_LABEL
+SOURCE_ACCESS_MODE=$SOURCE_ACCESS_MODE
+SOURCE_EXECUTION_POLICY=$SOURCE_EXECUTION_POLICY
 DESTINATION_FILESYSTEM=$DESTINATION_FILESYSTEM
 DESTINATION_DEVICE=$DESTINATION_DEVICE
 DESTINATION_LABEL=$DESTINATION_LABEL
+DESTINATION_ACCESS_MODE=$DESTINATION_ACCESS_MODE
+DESTINATION_EXECUTION_POLICY=$DESTINATION_EXECUTION_POLICY
 TEST_MODE=$TEST_MODE
 DEFINITION_OVERALL_STATE=$DEFINITION_OVERALL_STATE
 DEFINITION_FRESHNESS_STATE=$DEFINITION_FRESHNESS_STATE
@@ -124,6 +136,20 @@ EOF
 printf "engine_id\tdisplay_name\tstatus\texit_code\tdetections\tlog_file\n" > "$SUMMARY_FILE"
 
 /usr/local/bin/report-debug-event.sh scan-started "Offline scan started for $SOURCE_PATH"
+
+if [[ "$SOURCE_ACCESS_MODE" != "read-only" ]] || [[ "$SOURCE_EXECUTION_POLICY" != "noexec" ]]; then
+  /usr/local/bin/report-debug-event.sh scan-blocked "Offline scan blocked because the source media mount policy was not read-only plus noexec."
+  echo "Public media must be mounted read-only and noexec via mount-public-media.sh before scanning." >&2
+  exit 1
+fi
+
+if [[ -f "$DESTINATION_MEDIA_METADATA" ]]; then
+  if [[ "$DESTINATION_ACCESS_MODE" != "root-write-only" ]] || [[ "$DESTINATION_EXECUTION_POLICY" != "noexec" ]]; then
+    /usr/local/bin/report-debug-event.sh scan-blocked "Offline scan blocked because the destination media mount policy did not match the trusted-media rules."
+    echo "Trusted media must be mounted as root-write-only and noexec via mount-approved-media.sh." >&2
+    exit 1
+  fi
+fi
 
 if [[ "$DEFINITION_OVERALL_STATE" == "fail" ]]; then
   /usr/local/bin/report-debug-event.sh scan-blocked "Offline scan blocked because bundled definitions are older than the allowed age threshold."

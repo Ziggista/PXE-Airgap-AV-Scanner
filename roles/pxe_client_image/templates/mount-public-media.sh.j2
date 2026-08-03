@@ -5,6 +5,8 @@ DEVICE="${1:?usage: mount-public-media.sh /dev/sdX1}"
 TARGET="/mnt/public-media"
 METADATA_DIR="/run/av-scan"
 METADATA_FILE="$METADATA_DIR/source-media.env"
+SCANNER_UID="$(id -u {{ pxe_client_username }})"
+SCANNER_GID="$(id -g {{ pxe_client_username }})"
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
   echo "mount-public-media.sh requires root. Use sudo from the scanner desktop session." >&2
@@ -31,21 +33,102 @@ normalize_fs() {
   esac
 }
 
-mkdir -p "$TARGET"
-mount -o ro,nosuid,nodev,noexec "$DEVICE" "$TARGET"
+detect_fs_type() {
+  blkid -o value -s TYPE "$DEVICE" 2>/dev/null || true
+}
+
+prepare_target() {
+  mkdir -p "$TARGET"
+  chmod 0755 "$TARGET"
+}
+
+ensure_target_free() {
+  if mountpoint -q "$TARGET"; then
+    local existing_source
+    existing_source="$(findmnt -n -o SOURCE --target "$TARGET" 2>/dev/null || true)"
+    if [[ "$existing_source" == "$DEVICE" ]]; then
+      umount "$TARGET"
+    else
+      echo "$TARGET is already mounted from $existing_source. Unmount it first." >&2
+      exit 1
+    fi
+  fi
+}
+
+build_mount_options() {
+  local fs_type="$1"
+  local normalized_fs="$2"
+  local -a options=(ro nosuid nodev noexec noatime)
+
+  case "${fs_type,,}" in
+    ntfs|fuseblk|ntfs3)
+      options+=(uid="$SCANNER_UID" gid="$SCANNER_GID" fmask=0133 dmask=0022 windows_names)
+      ;;
+    exfat)
+      options+=(uid="$SCANNER_UID" gid="$SCANNER_GID" fmask=0133 dmask=0022)
+      ;;
+    vfat|fat|fat32|msdos)
+      options+=(uid="$SCANNER_UID" gid="$SCANNER_GID" fmask=0133 dmask=0022 shortname=mixed utf8=1)
+      ;;
+    hfsplus)
+      options+=(uid="$SCANNER_UID" gid="$SCANNER_GID" umask=0022 force)
+      ;;
+    ext2|ext3|ext4|xfs|btrfs)
+      :
+      ;;
+    *)
+      echo "Unsupported public-media filesystem: ${normalized_fs:-unknown} (${fs_type:-unknown})" >&2
+      exit 1
+      ;;
+  esac
+
+  local joined
+  joined="$(IFS=,; printf '%s' "${options[*]}")"
+  printf '%s\n' "$joined"
+}
+
+safe_mount() {
+  local fs_type="$1"
+  local options="$2"
+
+  if [[ -n "$fs_type" ]]; then
+    mount -t "$fs_type" -o "$options" "$DEVICE" "$TARGET"
+  else
+    mount -o "$options" "$DEVICE" "$TARGET"
+  fi
+}
+
+write_metadata() {
+  local fs_type="$1"
+  local fs_source="$2"
+  local fs_label="$3"
+  local mount_options="$4"
+
+  cat > "$METADATA_FILE" <<EOF
+DEVICE=$DEVICE
+MOUNT_SOURCE=${fs_source:-$DEVICE}
+FILESYSTEM=${fs_type:-unknown}
+LABEL=${fs_label:-unknown}
+TARGET=$TARGET
+MOUNT_OPTIONS=$mount_options
+ACCESS_MODE=read-only
+EXECUTION_POLICY=noexec
+EOF
+}
+
+prepare_target
+ensure_target_free
 mkdir -p "$METADATA_DIR"
+
+FS_DETECTED="$(detect_fs_type)"
+FS_TYPE="$(normalize_fs "${FS_DETECTED:-unknown}")"
+MOUNT_OPTIONS="$(build_mount_options "${FS_DETECTED:-}" "${FS_TYPE:-unknown}")"
+safe_mount "${FS_DETECTED:-}" "$MOUNT_OPTIONS"
 
 FS_TYPE="$(findmnt -n -o FSTYPE --target "$TARGET" 2>/dev/null || true)"
 FS_SOURCE="$(findmnt -n -o SOURCE --target "$TARGET" 2>/dev/null || true)"
 FS_LABEL="$(blkid -o value -s LABEL "$DEVICE" 2>/dev/null || true)"
 FS_TYPE="$(normalize_fs "${FS_TYPE:-unknown}")"
-
-cat > "$METADATA_FILE" <<EOF
-DEVICE=$DEVICE
-MOUNT_SOURCE=${FS_SOURCE:-$DEVICE}
-FILESYSTEM=${FS_TYPE:-unknown}
-LABEL=${FS_LABEL:-unknown}
-TARGET=$TARGET
-EOF
+write_metadata "${FS_TYPE:-unknown}" "${FS_SOURCE:-$DEVICE}" "${FS_LABEL:-unknown}" "$MOUNT_OPTIONS"
 
 echo "Mounted $DEVICE read-only at $TARGET"

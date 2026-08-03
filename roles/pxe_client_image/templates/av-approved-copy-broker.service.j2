@@ -3,4 +3,5 @@ Description=Process approved media copy requests
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/sbin/process-approved-copy-request.sh
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/bin/bash /usr/local/sbin/process-approved-copy-request.sh

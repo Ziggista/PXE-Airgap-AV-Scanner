@@ -33,6 +33,24 @@ if [[ -z "${SOURCE_PATH:-}" ]]; then
   exit 1
 fi
 
+case "${SOURCE_PATH}" in
+  /mnt/public-media|/mnt/public-media/*)
+    ;;
+  *)
+    echo "Source path must stay under /mnt/public-media. Refusing $SOURCE_PATH." >&2
+    exit 1
+    ;;
+esac
+
+case "${DESTINATION_PATH}" in
+  /mnt/approved-media|/mnt/approved-media/*)
+    ;;
+  *)
+    echo "Destination path must stay under /mnt/approved-media. Refusing $DESTINATION_PATH." >&2
+    exit 1
+    ;;
+esac
+
 if ! mountpoint -q "$DESTINATION_PATH"; then
   echo "Destination path $DESTINATION_PATH is not mounted. Run mount-approved-media.sh first." >&2
   exit 1
@@ -47,6 +65,14 @@ if [[ -f "$DESTINATION_MEDIA_METADATA" ]]; then
   DESTINATION_FILESYSTEM="${FILESYSTEM:-unknown}"
   DESTINATION_DEVICE="${DEVICE:-unknown}"
   DESTINATION_LABEL="${LABEL:-unknown}"
+  if [[ "${ACCESS_MODE:-unknown}" != "root-write-only" ]]; then
+    echo "Destination media policy mismatch. Remount trusted media with mount-approved-media.sh." >&2
+    exit 1
+  fi
+  if [[ "${EXECUTION_POLICY:-unknown}" != "noexec" ]]; then
+    echo "Destination media execution policy mismatch. Remount trusted media with mount-approved-media.sh." >&2
+    exit 1
+  fi
 fi
 
 python3 - <<'PY' "$METADATA_FILE" "$DESTINATION_PATH" "$DESTINATION_FILESYSTEM" "$DESTINATION_DEVICE" "$DESTINATION_LABEL"

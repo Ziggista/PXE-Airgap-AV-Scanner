@@ -32,26 +32,99 @@ normalize_fs() {
   esac
 }
 
+detect_fs_type() {
+  blkid -o value -s TYPE "$DEVICE" 2>/dev/null || true
+}
+
+prepare_target() {
+  mkdir -p "$TARGET"
+  chmod 0700 "$TARGET"
+}
+
+ensure_target_free() {
+  if mountpoint -q "$TARGET"; then
+    local existing_source
+    existing_source="$(findmnt -n -o SOURCE --target "$TARGET" 2>/dev/null || true)"
+    if [[ "$existing_source" == "$DEVICE" ]]; then
+      umount "$TARGET"
+    else
+      echo "$TARGET is already mounted from $existing_source. Unmount it first." >&2
+      exit 1
+    fi
+  fi
+}
+
+build_mount_options() {
+  local fs_type="$1"
+  local normalized_fs="$2"
+  local -a options=(rw nosuid nodev noexec noatime)
+
+  case "${fs_type,,}" in
+    ntfs|fuseblk|ntfs3)
+      options+=(uid=0 gid=0 fmask=0177 dmask=0077 windows_names)
+      ;;
+    *)
+      echo "Destination media must be NTFS. Refusing filesystem ${normalized_fs:-unknown} (${fs_type:-unknown})." >&2
+      exit 1
+      ;;
+  esac
+
+  local joined
+  joined="$(IFS=,; printf '%s' "${options[*]}")"
+  printf '%s\n' "$joined"
+}
+
+safe_mount() {
+  local fs_type="$1"
+  local options="$2"
+
+  if [[ -n "$fs_type" ]]; then
+    mount -t "$fs_type" -o "$options" "$DEVICE" "$TARGET"
+  else
+    mount -o "$options" "$DEVICE" "$TARGET"
+  fi
+}
+
+write_metadata() {
+  local fs_type="$1"
+  local fs_source="$2"
+  local fs_label="$3"
+  local mount_options="$4"
+
+  cat > "$METADATA_FILE" <<EOF
+DEVICE=$DEVICE
+MOUNT_SOURCE=${fs_source:-$DEVICE}
+FILESYSTEM=${fs_type:-unknown}
+LABEL=${fs_label:-unknown}
+TARGET=$TARGET
+MOUNT_OPTIONS=$mount_options
+ACCESS_MODE=root-write-only
+EXECUTION_POLICY=noexec
+EOF
+}
+
 if [[ ! -f "$APPROVAL" ]]; then
   echo "Writable destination media is blocked until offline scans complete successfully." >&2
   exit 1
 fi
 
-mkdir -p "$TARGET"
-mount -o rw,nosuid,nodev,noexec "$DEVICE" "$TARGET"
+prepare_target
+ensure_target_free
 mkdir -p "$METADATA_DIR"
+
+FS_DETECTED="$(detect_fs_type)"
+FS_TYPE="$(normalize_fs "${FS_DETECTED:-unknown}")"
+if [[ "$FS_TYPE" != "ntfs" ]]; then
+  echo "Destination media must normalize to NTFS. Refusing $FS_TYPE." >&2
+  exit 1
+fi
+MOUNT_OPTIONS="$(build_mount_options "${FS_DETECTED:-}" "${FS_TYPE:-unknown}")"
+safe_mount "${FS_DETECTED:-}" "$MOUNT_OPTIONS"
 
 FS_TYPE="$(findmnt -n -o FSTYPE --target "$TARGET" 2>/dev/null || true)"
 FS_SOURCE="$(findmnt -n -o SOURCE --target "$TARGET" 2>/dev/null || true)"
 FS_LABEL="$(blkid -o value -s LABEL "$DEVICE" 2>/dev/null || true)"
 FS_TYPE="$(normalize_fs "${FS_TYPE:-unknown}")"
+write_metadata "${FS_TYPE:-unknown}" "${FS_SOURCE:-$DEVICE}" "${FS_LABEL:-unknown}" "$MOUNT_OPTIONS"
 
-cat > "$METADATA_FILE" <<EOF
-DEVICE=$DEVICE
-MOUNT_SOURCE=${FS_SOURCE:-$DEVICE}
-FILESYSTEM=${FS_TYPE:-unknown}
-LABEL=${FS_LABEL:-unknown}
-TARGET=$TARGET
-EOF
-
-echo "Mounted $DEVICE read-write at $TARGET"
+echo "Mounted $DEVICE for root-mediated write-only transfer at $TARGET"

@@ -61,13 +61,16 @@ This workspace prepares a PXE-booted Ubuntu live client that:
 - `av-network-enforcer.service` is the root-owned watchdog that checks every `{{ pxe_client_network_enforcer_interval_seconds }}` seconds and forces non-loopback networking down once the splash is active or removable media is present
 - In test builds with `pxe_client_allow_post_splash_debug: true`, the daemon logs the would-be enforcement state but leaves networking up for debug capture
 - The scanner desktop user is intentionally a non-login kiosk account, not a general `sudo` user
-- Source and destination media are mounted `noexec,nosuid,nodev`
-- Final media copy is requested through `/usr/local/bin/request-approved-copy.sh` and executed by a root-owned broker service after re-validating the scan approval state
+- Source media is mounted read-only with `noexec,nosuid,nodev` and scan execution is blocked unless that policy is recorded in `/run/av-scan/source-media.env`
+- Trusted destination media is restricted to NTFS and mounted for root-mediated copy only with `noexec,nosuid,nodev`; the kiosk user cannot write to the mount directly
+- Final media copy is requested through `/usr/local/bin/request-approved-copy.sh`, which invokes the root-owned copy helper under a tightly scoped sudo rule after the approved scan context is reloaded
 - The remaster process prunes Ubuntu installer pools and unused `casper` variants from the published ISO so the `toram` download fits into lab RAM budgets
 - The login session launches `/usr/local/bin/av-network-banner.py`
 - Source media should be mounted with:
 
   `sudo /usr/local/bin/mount-public-media.sh /dev/sdX1`
+
+  This helper normalizes supported public-media filesystems, mounts them read-only, and records the enforced mount policy for the scan stage.
 
 - Offline scans should be run with:
 
@@ -77,6 +80,8 @@ This workspace prepares a PXE-booted Ubuntu live client that:
 
   `sudo /usr/local/bin/mount-approved-media.sh /dev/sdY1 /mnt/approved-media`
   `/usr/local/bin/request-approved-copy.sh`
+
+  The trusted-media helper now rejects non-NTFS filesystems and mounts the destination so only the root-mediated copy helper can write into it.
 
 - Each scan creates:
 

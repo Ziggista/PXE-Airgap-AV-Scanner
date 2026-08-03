@@ -27,3 +27,7 @@ Thumbs.db
 AV.code-workspace
 
 inventories/lab/group_vars/all/license_acceptance.yml
+
+.tmp-*
+.tmp-rendered/
+.tmp-selinux-fix/
