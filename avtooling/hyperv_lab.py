@@ -236,12 +236,9 @@ if ($vm) {{
     Rename-VM -VM $vm -NewName '{old_name}'
     $vm = Get-VM -Name '{old_name}'
   }}
-  if (Test-Path -LiteralPath $archiveRoot) {{
-    Remove-Item -LiteralPath $archiveRoot -Recurse -Force -ErrorAction Stop
-  }}
-  New-Item -ItemType Directory -Path $archiveRoot -Force | Out-Null
-  Move-VMStorage -VM $vm -DestinationStoragePath $archiveRoot
-}} elseif (Test-Path -LiteralPath $sourceRoot) {{
+  Remove-VM -VM $vm -Force
+}}
+if (Test-Path -LiteralPath $sourceRoot) {{
   if (Test-Path -LiteralPath $archiveRoot) {{
     Remove-Item -LiteralPath $archiveRoot -Recurse -Force -ErrorAction Stop
   }}
