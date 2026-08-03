@@ -157,6 +157,10 @@ def _scp_base(private_key: Path) -> list[str]:
     ]
 
 
+def _run_remote(private_key: Path, host: str, command: str) -> None:
+    _run(_ssh_base(private_key) + [f"ziggi-py@{host}", command])
+
+
 def _remote_shell_quote(value: str) -> str:
     return shlex.quote(value)
 
@@ -409,7 +413,7 @@ def deploy_from_control_node(
     repo_url: str = DEFAULT_REPO_URL,
     branch: str = DEFAULT_BRANCH,
     remote_repo_root: str = DEFAULT_REMOTE_REPO_ROOT,
-) -> None:
+) -> dict[str, str]:
     license_file = repo_root / "inventories" / "lab" / "group_vars" / "all" / "license_acceptance.yml"
     inventory_file = repo_root / "inventories" / "lab" / "hosts.yml"
     remote_license = f"{remote_repo_root}/inventories/lab/group_vars/all/license_acceptance.yml"
@@ -432,7 +436,7 @@ def deploy_from_control_node(
             "mkdir -p ~/.ssh",
         ]
     )
-    _run(_ssh_base(private_key) + [f"ziggi-py@{control_ip}", remote_bootstrap])
+    _run_remote(private_key, control_ip, remote_bootstrap)
 
     _run(_scp_base(private_key) + [str(private_key), f"ziggi-py@{control_ip}:~/.ssh/ziggi-py-host-ed25519"])
     _run(_scp_base(private_key) + [str(public_key), f"ziggi-py@{control_ip}:~/.ssh/ziggi-py-host-ed25519.pub"])
@@ -440,7 +444,7 @@ def deploy_from_control_node(
     _run(_scp_base(private_key) + [str(license_file), f"ziggi-py@{control_ip}:{remote_license}"])
     _run(_scp_base(private_key) + [str(upstream_iso), f"ziggi-py@{control_ip}:{remote_upstream_iso}"])
 
-    remote_deploy = " && ".join(
+    remote_preamble = " && ".join(
         [
             f"cd {_remote_shell_quote(remote_repo_root)}",
             "chmod 700 ~/.ssh",
@@ -448,14 +452,40 @@ def deploy_from_control_node(
             "chmod 644 ~/.ssh/ziggi-py-host-ed25519.pub",
             "sudo cloud-init status --wait --long",
             "bash ./scripts/bootstrap-ansible.sh",
-            "ansible-playbook -i inventories/lab/hosts.yml playbooks/control-node.yml",
-            "ansible-playbook -i inventories/lab/hosts.yml playbooks/repo-vm.yml",
-            "ansible-playbook -i inventories/lab/hosts.yml playbooks/build-vm.yml",
-            "ansible-playbook -i inventories/lab/hosts.yml playbooks/build-pxe-client-assets.yml",
-            "ansible-playbook -i inventories/lab/hosts.yml playbooks/healthcheck.yml",
         ]
     )
-    _run(_ssh_base(private_key) + [f"ziggi-py@{control_ip}", remote_deploy])
+    _run_remote(private_key, control_ip, remote_preamble)
+    _run_remote(
+        private_key,
+        control_ip,
+        f"cd {_remote_shell_quote(remote_repo_root)} && ansible-playbook -i inventories/lab/hosts.yml playbooks/control-node.yml",
+    )
+    _run_remote(
+        private_key,
+        control_ip,
+        f"cd {_remote_shell_quote(remote_repo_root)} && ansible-playbook -i inventories/lab/hosts.yml playbooks/repo-vm.yml",
+    )
+    _run_remote(
+        private_key,
+        control_ip,
+        f"cd {_remote_shell_quote(remote_repo_root)} && ansible-playbook -i inventories/lab/hosts.yml playbooks/build-vm.yml",
+    )
+
+    refreshed_ips = wait_for_inventory_discovery(repo_root)
+    refreshed_control_ip = refreshed_ips["av-control-node"]
+    _run(_scp_base(private_key) + [str(inventory_file), f"ziggi-py@{refreshed_control_ip}:{remote_inventory}"])
+    wait_for_tcp(refreshed_ips["av-build-vm"], 22, timeout_seconds=900)
+    _run_remote(
+        private_key,
+        refreshed_control_ip,
+        f"cd {_remote_shell_quote(remote_repo_root)} && ansible-playbook -i inventories/lab/hosts.yml playbooks/build-pxe-client-assets.yml",
+    )
+    _run_remote(
+        private_key,
+        refreshed_control_ip,
+        f"cd {_remote_shell_quote(remote_repo_root)} && ansible-playbook -i inventories/lab/hosts.yml playbooks/healthcheck.yml",
+    )
+    return refreshed_ips
 
 
 def verify_pxe_reservation(private_key: Path, build_ip: str, timeout_seconds: int = 300) -> str:
