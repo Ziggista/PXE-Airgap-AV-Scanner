@@ -140,7 +140,6 @@ $neighbors | ConvertTo-Json -Depth 4
         neighbor_by_mac.setdefault(normalized_mac, []).append(neighbor)
 
     discovered: list[VmAddress] = []
-    missing: list[str] = []
 
     for adapter in adapters:
         vm_name = str(adapter.get("VMName", ""))
@@ -150,7 +149,6 @@ $neighbors | ConvertTo-Json -Depth 4
         normalized_mac = _normalize_mac(str(adapter.get("MacAddress", "")))
         candidates = neighbor_by_mac.get(normalized_mac, [])
         if not candidates:
-            missing.append(vm_name)
             continue
 
         best = sorted(
@@ -171,6 +169,8 @@ $neighbors | ConvertTo-Json -Depth 4
             )
         )
 
+    discovered_vm_names = {address.vm_name for address in discovered}
+    missing = sorted(vm_name for vm_name in vm_names if vm_name not in discovered_vm_names)
     if missing:
         missing_text = ", ".join(sorted(missing))
         raise HyperVInventoryError(
