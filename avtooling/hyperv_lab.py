@@ -7,7 +7,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from avtooling.cloudinit_iso import build_cloudinit_iso
 from avtooling.hyperv_inventory import HyperVInventoryError, discover_vm_addresses, update_inventory_hosts_file
@@ -415,14 +415,15 @@ def deploy_from_control_node(
     public_key = private_key.with_suffix(".pub")
     upstream_iso = repo_root / "runtime" / "downloads" / "ubuntu-26.04-desktop-amd64.iso"
     remote_upstream_iso = f"{remote_repo_root}/runtime/downloads/{upstream_iso.name}"
+    remote_repo_parent = str(PurePosixPath(remote_repo_root).parent)
     if not public_key.exists():
         raise HyperVLabError(f"SSH public key not found: {public_key}")
 
     remote_bootstrap = " && ".join(
         [
             f"sudo rm -rf {_remote_shell_quote(remote_repo_root)}",
-            f"sudo mkdir -p {_remote_shell_quote(str(Path(remote_repo_root).parent))}",
-            f"sudo chown ziggi-py:ziggi-py {_remote_shell_quote(str(Path(remote_repo_root).parent))}",
+            f"sudo mkdir -p {_remote_shell_quote(remote_repo_parent)}",
+            f"sudo chown ziggi-py:ziggi-py {_remote_shell_quote(remote_repo_parent)}",
             f"git clone --branch {_remote_shell_quote(branch)} {_remote_shell_quote(repo_url)} {_remote_shell_quote(remote_repo_root)}",
             "mkdir -p ~/.ssh",
         ]
