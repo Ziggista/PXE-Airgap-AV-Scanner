@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily PXE client rebuild timer
+
+[Timer]
+OnCalendar={{ pxe_server_client_rebuild_calendar }}
+Persistent=true
+Unit=pxe-client-rebuild.service
+
+[Install]
+WantedBy=timers.target

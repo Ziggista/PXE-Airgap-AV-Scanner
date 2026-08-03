@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+lock_file="/run/lock/pxe-client-rebuild.lock"
+log_file="{{ pxe_server_maintenance_log_root }}/pxe-client-rebuild.log"
+pxe_output_dir="{{ pxe_client_output_dir | default('/srv/pxe-client-image/output') }}"
+
+mkdir -p "$(dirname "$lock_file")" "{{ pxe_server_maintenance_log_root }}"
+
+exec 9>"$lock_file"
+flock -n 9 || exit 0
+
+{
+  echo "[$(date -Iseconds)] starting PXE client rebuild"
+  "$pxe_output_dir/build-pxe-client-image.sh"
+  "$pxe_output_dir/publish-pxe-client-assets.sh"
+  echo "[$(date -Iseconds)] PXE client rebuild complete"
+} >>"$log_file" 2>&1

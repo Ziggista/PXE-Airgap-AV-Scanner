@@ -26,6 +26,7 @@
     - "{{ pxe_server_client_publish_dir }}"
     - "{{ pxe_server_boot_nfs_root }}"
     - "{{ pxe_server_tftp_client_publish_dir }}"
+    - "{{ pxe_server_maintenance_log_root }}"
 
 - name: Ensure NFS exports drop-in directory exists
   ansible.builtin.file:
@@ -178,6 +179,64 @@
     owner: root
     group: root
     mode: "0755"
+
+- name: Render scheduled PXE definition refresh helper
+  ansible.builtin.template:
+    src: pxe-definition-refresh.sh.j2
+    dest: /usr/local/sbin/pxe-definition-refresh.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render scheduled PXE definition refresh service
+  ansible.builtin.template:
+    src: pxe-definition-refresh.service.j2
+    dest: /etc/systemd/system/pxe-definition-refresh.service
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render scheduled PXE definition refresh timer
+  ansible.builtin.template:
+    src: pxe-definition-refresh.timer.j2
+    dest: /etc/systemd/system/pxe-definition-refresh.timer
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render scheduled PXE client rebuild helper
+  ansible.builtin.template:
+    src: pxe-client-rebuild.sh.j2
+    dest: /usr/local/sbin/pxe-client-rebuild.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Render scheduled PXE client rebuild service
+  ansible.builtin.template:
+    src: pxe-client-rebuild.service.j2
+    dest: /etc/systemd/system/pxe-client-rebuild.service
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Render scheduled PXE client rebuild timer
+  ansible.builtin.template:
+    src: pxe-client-rebuild.timer.j2
+    dest: /etc/systemd/system/pxe-client-rebuild.timer
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable scheduled PXE maintenance timers
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    daemon_reload: true
+    enabled: true
+    state: started
+  loop:
+    - pxe-definition-refresh.timer
+    - pxe-client-rebuild.timer
 
 - name: Sync definitions from proxy onto PXE server
   ansible.builtin.command: /usr/local/sbin/sync-from-proxy.sh

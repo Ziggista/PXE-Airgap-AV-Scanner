@@ -136,6 +136,7 @@ python .\tools\refresh_hyperv_inventory.py --check
 - Includes a PXE client image role that remasters the working Ubuntu Desktop PXE base with an autologin desktop, disconnect banner, test-mode SSH/debug access, read-only source media mounts, gated writable destination mounts, and offline scan helpers.
 - Includes a `build-pxe-client-assets.yml` playbook to sync ClamAV definitions from the proxy and publish PXE boot assets from the build VM.
 - Includes a `sync-pxe-definitions.yml` playbook so daily ClamAV signature updates can flow proxy -> PXE server -> PXE client boot without rebuilding the full client image.
+- The build VM role now installs daily `systemd` timers for `09:00 UTC` definition refresh and `12:00 UTC` PXE client rebuild/publish.
 - Includes a Windows staging helper for upstream Ubuntu live ISOs so the working UEFI PXE base can be published consistently.
 
 ## What still needs implementation

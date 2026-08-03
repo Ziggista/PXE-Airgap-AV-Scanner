@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+lock_file="/run/lock/pxe-definition-refresh.lock"
+log_file="{{ pxe_server_maintenance_log_root }}/pxe-definition-refresh.log"
+pxe_output_dir="{{ pxe_client_output_dir | default('/srv/pxe-client-image/output') }}"
+overlay_dir="{{ pxe_client_overlay_root | default('/srv/pxe-client-image/overlay') }}/opt/av/definitions/clamav"
+publish_dir="{{ pxe_server_definitions_publish_dir }}"
+system_db="/var/lib/clamav"
+
+mkdir -p "$(dirname "$lock_file")" "{{ pxe_server_maintenance_log_root }}"
+
+exec 9>"$lock_file"
+flock -n 9 || exit 0
+
+{
+  echo "[$(date -Iseconds)] starting PXE definition refresh"
+  proxy_sync_ok=0
+  if /usr/local/sbin/sync-from-proxy.sh; then
+    proxy_sync_ok=1
+  else
+    echo "[$(date -Iseconds)] proxy publish sync failed, continuing with fallback"
+  fi
+
+  if "$pxe_output_dir/sync-clamav-from-proxy.sh"; then
+    proxy_sync_ok=1
+  else
+    echo "[$(date -Iseconds)] proxy overlay sync failed, continuing with fallback"
+  fi
+
+  mkdir -p "$overlay_dir" "$publish_dir"
+  rsync -a \
+    --include='*.cvd' \
+    --include='*.cld' \
+    --exclude='*' \
+    "$system_db"/ "$overlay_dir"/
+  rsync -a --delete "$overlay_dir"/ "$publish_dir"/
+
+  if [[ "$proxy_sync_ok" -eq 0 ]]; then
+    echo "[$(date -Iseconds)] used local /var/lib/clamav fallback because proxy sync was unavailable"
+  fi
+  echo "[$(date -Iseconds)] PXE definition refresh complete"
+} >>"$log_file" 2>&1

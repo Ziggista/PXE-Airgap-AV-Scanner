@@ -1,0 +1,8 @@
+[Unit]
+Description=Refresh PXE-hosted and PXE-overlay ClamAV definitions
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pxe-definition-refresh.sh

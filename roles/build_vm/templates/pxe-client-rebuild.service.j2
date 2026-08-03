@@ -1,0 +1,8 @@
+[Unit]
+Description=Rebuild and publish PXE client boot assets
+Wants=network-online.target
+After=network-online.target pxe-definition-refresh.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pxe-client-rebuild.sh

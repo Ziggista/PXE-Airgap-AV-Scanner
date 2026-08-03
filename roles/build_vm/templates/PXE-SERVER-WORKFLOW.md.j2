@@ -58,3 +58,17 @@ Run these Ansible playbooks from the control node:
 2. `ansible-playbook playbooks/sync-pxe-definitions.yml`
 
 This updates ClamAV signatures on the proxy and PXE server without rebuilding the client ISO.
+
+## Scheduled maintenance
+
+- The build VM installs `systemd` timers for recurring PXE maintenance.
+- `pxe-definition-refresh.timer` runs at `{{ pxe_server_definition_sync_calendar }}`.
+- `pxe-client-rebuild.timer` runs at `{{ pxe_server_client_rebuild_calendar }}`.
+- The definition refresh helper updates both:
+  - `{{ pxe_server_definitions_publish_dir }}`
+  - `{{ pxe_client_output_dir | default('/srv/pxe-client-image/output') }}/../overlay/opt/av/definitions/clamav`
+- The definition refresh helper prefers proxy-published definitions, then falls back to the build VM's local `/var/lib/clamav` cache if the proxy path is temporarily unavailable.
+- The rebuild helper runs:
+  - `{{ pxe_client_output_dir | default('/srv/pxe-client-image/output') }}/build-pxe-client-image.sh`
+  - `{{ pxe_client_output_dir | default('/srv/pxe-client-image/output') }}/publish-pxe-client-assets.sh`
+- Maintenance logs are written under `{{ pxe_server_maintenance_log_root }}`.

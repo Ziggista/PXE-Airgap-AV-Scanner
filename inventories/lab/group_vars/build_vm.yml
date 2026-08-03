@@ -37,6 +37,9 @@ pxe_server_client_reserved_mac: "00:15:5d:01:1c:0e"
 pxe_server_client_reserved_ip: 192.168.50.184
 pxe_server_client_reserved_hostname: av-pxe-client
 pxe_server_sync_from_proxy_now: false
+pxe_server_definition_sync_calendar: "*-*-* 09:00:00 UTC"
+pxe_server_client_rebuild_calendar: "*-*-* 12:00:00 UTC"
+pxe_server_maintenance_log_root: /var/log/av-pxe
 
 build_vm_packages:
   - dnsmasq

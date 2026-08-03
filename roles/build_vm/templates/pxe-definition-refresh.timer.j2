@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily PXE definition refresh timer
+
+[Timer]
+OnCalendar={{ pxe_server_definition_sync_calendar }}
+Persistent=true
+Unit=pxe-definition-refresh.service
+
+[Install]
+WantedBy=timers.target
