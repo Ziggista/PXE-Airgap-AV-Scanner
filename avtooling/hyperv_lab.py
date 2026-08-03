@@ -219,17 +219,23 @@ def rotate_existing_vms(
         archive_root = old_root / old_name
         script = rf"""
 $ErrorActionPreference = 'Stop'
-$vm = Get-VM -Name '{vm_name}' -ErrorAction SilentlyContinue
-if ($vm) {{
-  Stop-VM -Name '{vm_name}' -TurnOff -Force -ErrorAction SilentlyContinue | Out-Null
-  $vm = Get-VM -Name '{vm_name}'
-  Rename-VM -VM $vm -NewName '{old_name}'
-  $vm = Get-VM -Name '{old_name}'
-}}
-
 $sourceRoot = '{source_root}'
 $archiveRoot = '{archive_root}'
+$vm = Get-VM -Name '{vm_name}' -ErrorAction SilentlyContinue
+if (-not $vm) {{
+  $vm = Get-VM | Where-Object {{
+    $_.Path -like "$sourceRoot*" -or
+    $_.ConfigurationLocation -like "$sourceRoot*" -or
+    $_.SnapshotFileLocation -like "$sourceRoot*" -or
+    $_.SmartPagingFilePath -like "$sourceRoot*"
+  }} | Select-Object -First 1
+}}
 if ($vm) {{
+  Stop-VM -VM $vm -TurnOff -Force -ErrorAction SilentlyContinue | Out-Null
+  if ($vm.Name -ne '{old_name}') {{
+    Rename-VM -VM $vm -NewName '{old_name}'
+    $vm = Get-VM -Name '{old_name}'
+  }}
   if (Test-Path -LiteralPath $archiveRoot) {{
     Remove-Item -LiteralPath $archiveRoot -Recurse -Force -ErrorAction Stop
   }}
