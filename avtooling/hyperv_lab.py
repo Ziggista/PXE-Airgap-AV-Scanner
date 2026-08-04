@@ -166,6 +166,10 @@ def _run_remote_capture(private_key: Path, host: str, command: str) -> str:
     return result.stdout
 
 
+def _copy_remote_inventory(private_key: Path, control_ip: str, inventory_file: Path, remote_inventory: str) -> None:
+    _run(_scp_base(private_key) + [str(inventory_file), f"ziggi-py@{control_ip}:{remote_inventory}"])
+
+
 def _remote_shell_quote(value: str) -> str:
     return shlex.quote(value)
 
@@ -467,7 +471,7 @@ def deploy_from_control_node(
 
     _run(_scp_base(private_key) + [str(private_key), f"ziggi-py@{control_ip}:~/.ssh/ziggi-py-host-ed25519"])
     _run(_scp_base(private_key) + [str(public_key), f"ziggi-py@{control_ip}:~/.ssh/ziggi-py-host-ed25519.pub"])
-    _run(_scp_base(private_key) + [str(inventory_file), f"ziggi-py@{control_ip}:{remote_inventory}"])
+    _copy_remote_inventory(private_key, control_ip, inventory_file, remote_inventory)
     _run(_scp_base(private_key) + [str(license_file), f"ziggi-py@{control_ip}:{remote_license}"])
     _run(_scp_base(private_key) + [str(upstream_iso), f"ziggi-py@{control_ip}:{remote_upstream_iso}"])
 
@@ -487,11 +491,13 @@ def deploy_from_control_node(
         control_ip,
         f"cd {_remote_shell_quote(remote_repo_root)} && ansible-playbook -i inventories/lab/hosts.yml playbooks/control-node.yml",
     )
+    _copy_remote_inventory(private_key, control_ip, inventory_file, remote_inventory)
     _run_remote(
         private_key,
         control_ip,
         f"cd {_remote_shell_quote(remote_repo_root)} && ansible-playbook -i inventories/lab/hosts.yml playbooks/repo-vm.yml",
     )
+    _copy_remote_inventory(private_key, control_ip, inventory_file, remote_inventory)
     _run_remote(
         private_key,
         control_ip,
@@ -501,16 +507,23 @@ def deploy_from_control_node(
     refreshed_control_ip, refreshed_ips = wait_for_reachable_inventory_host(
         repo_root, "av-control-node", timeout_seconds=900
     )
-    _run(_scp_base(private_key) + [str(inventory_file), f"ziggi-py@{refreshed_control_ip}:{remote_inventory}"])
+    _copy_remote_inventory(private_key, refreshed_control_ip, inventory_file, remote_inventory)
     build_vm_ip, refreshed_ips = wait_for_reachable_inventory_host(
         repo_root, "av-build-vm", timeout_seconds=900
     )
-    _run(_scp_base(private_key) + [str(inventory_file), f"ziggi-py@{refreshed_control_ip}:{remote_inventory}"])
+    _copy_remote_inventory(private_key, refreshed_control_ip, inventory_file, remote_inventory)
     _run_remote(
         private_key,
         refreshed_control_ip,
         f"cd {_remote_shell_quote(remote_repo_root)} && ansible-playbook -i inventories/lab/hosts.yml playbooks/build-pxe-client-assets.yml",
     )
+    refreshed_control_ip, refreshed_ips = wait_for_reachable_inventory_host(
+        repo_root, "av-control-node", timeout_seconds=300
+    )
+    build_vm_ip, refreshed_ips = wait_for_reachable_inventory_host(
+        repo_root, "av-build-vm", timeout_seconds=300
+    )
+    _copy_remote_inventory(private_key, refreshed_control_ip, inventory_file, remote_inventory)
     _run_remote(
         private_key,
         refreshed_control_ip,
@@ -548,7 +561,8 @@ def verify_build_vm_checkpoints(private_key: Path, build_ip: str) -> str:
         [
             "sudo systemctl is-active dnsmasq nginx tftpd-hpa av-debug-collector",
             "curl -fsS http://127.0.0.1/boot.ipxe >/tmp/boot.ipxe.check",
-            "grep -q 'kernel http://192.168.50.2/images/ubuntu-live-av-client-test/vmlinuz' /tmp/boot.ipxe.check",
+            "grep -q 'set boot_url http://192.168.50.2' /tmp/boot.ipxe.check",
+            "grep -q 'kernel ${boot_url}/images/ubuntu-live-av-client-test/vmlinuz' /tmp/boot.ipxe.check",
             "curl -fsSI http://127.0.0.1/images/ubuntu-live-av-client-test/vmlinuz",
             "curl -fsSI http://127.0.0.1/images/ubuntu-live-av-client-test/initrd",
             "curl -fsSI http://127.0.0.1/artifacts/ubuntu-26.04-av-client-test-amd64.iso",
