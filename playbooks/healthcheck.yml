@@ -129,6 +129,7 @@
         - "{{ pxe_server_client_publish_dir }}/vmlinuz"
         - "{{ pxe_server_client_publish_dir }}/initrd"
         - "{{ tftp_root }}/boot.ipxe"
+        - "{{ pxe_root }}/boot.ipxe"
         - "{{ tftp_root }}/snponly.efi"
         - "{{ tftp_root }}/undionly.kpxe"
       register: build_vm_artifact_stats

@@ -10,7 +10,7 @@ dhcp-match=set:efi64,option:client-arch,9
 dhcp-userclass=set:ipxe,iPXE
 dhcp-boot=tag:!ipxe,tag:bios,undionly.kpxe
 dhcp-boot=tag:!ipxe,tag:efi64,snponly.efi
-dhcp-boot=tag:ipxe,boot.ipxe
+dhcp-boot=tag:ipxe,http://{{ pxe_server_boot_ip }}/boot.ipxe
 {% if pxe_server_interface %}
 interface={{ pxe_server_interface }}
 bind-interfaces

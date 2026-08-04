@@ -70,6 +70,14 @@
     group: root
     mode: "0644"
 
+- name: Publish iPXE boot script over HTTP
+  ansible.builtin.template:
+    src: boot.ipxe.j2
+    dest: "{{ pxe_root }}/boot.ipxe"
+    owner: root
+    group: root
+    mode: "0644"
+
 - name: Publish BIOS PXE bootloader files into TFTP root
   ansible.builtin.copy:
     src: "{{ item.src }}"
