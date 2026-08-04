@@ -505,6 +505,7 @@ def deploy_from_control_node(
     build_vm_ip, refreshed_ips = wait_for_reachable_inventory_host(
         repo_root, "av-build-vm", timeout_seconds=900
     )
+    _run(_scp_base(private_key) + [str(inventory_file), f"ziggi-py@{refreshed_control_ip}:{remote_inventory}"])
     _run_remote(
         private_key,
         refreshed_control_ip,
