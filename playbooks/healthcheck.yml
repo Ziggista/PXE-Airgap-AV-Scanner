@@ -165,7 +165,8 @@
           - ansible_facts.services['tftpd-hpa.service'].state == 'running'
           - ansible_facts.services['av-debug-collector.service'].state == 'running'
           - build_vm_local_uri_checks.results | map(attribute='status') | min == 200
-          - "'kernel http://192.168.50.2/images/ubuntu-live-av-client-test/vmlinuz' in (build_vm_boot_ipxe.content | b64decode)"
+          - "'set boot_url http://192.168.50.2' in (build_vm_boot_ipxe.content | b64decode)"
+          - "'kernel ${boot_url}/images/ubuntu-live-av-client-test/vmlinuz' in (build_vm_boot_ipxe.content | b64decode)"
           - build_vm_timer_checks.results | map(attribute='stdout') | unique == ['active']
           - build_vm_proxy_uri_check.status == 200
           - build_vm_artifact_stats.results | selectattr('stat.exists', 'equalto', false) | list | length == 0
