@@ -74,4 +74,6 @@ This workflow:
 - refreshes the Ansible inventory from the live Hyper-V neighbor table before any SSH/Ansible work starts
 - copies the local automation SSH keypair into the fresh control node so Ansible can reach the proxy and build guests
 - deploys the control node, proxy node, PXE build node, PXE assets, and healthchecks from a clean clone on the control node
+- verifies build-node readiness checkpoints for services, HTTP endpoints, and published PXE artifacts before the PXE client test starts
 - starts a fresh `av-pxe-uefi-test-vm` and verifies that the PXE DHCP reservation stays on `192.168.50.184`
+- verifies nginx access logs show the PXE client fetched `boot.ipxe`, `vmlinuz`, `initrd`, and the remastered ISO

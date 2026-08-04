@@ -21,17 +21,26 @@ python .\tools\rebuild_hyperv_lab.py
 4. Uses fixed Hyper-V MAC addresses that match:
    - [inventories/lab/hosts.yml](C:/Users/Ziggi/AV/inventories/lab/hosts.yml)
    - the cloud-init `network-config` files
-5. Waits for SSH on the fresh control, proxy, and build VMs.
+5. Waits for DHCP management discovery and SSH on the fresh control, proxy, and build VMs.
 6. Copies the local automation SSH keypair into `~/.ssh/` on the fresh control node.
-7. Copies the local operator-managed `license_acceptance.yml` into a clean repo clone on the control node.
+7. Copies the local operator-managed `license_acceptance.yml` and the live `inventories/lab/hosts.yml` into a clean repo clone on the control node.
 8. Runs:
    - `playbooks/control-node.yml`
    - `playbooks/repo-vm.yml`
    - `playbooks/build-vm.yml`
    - `playbooks/build-pxe-client-assets.yml`
    - `playbooks/healthcheck.yml`
-9. Starts a fresh `av-pxe-uefi-test-vm`.
-10. Verifies that the PXE client reservation appears on `192.168.50.184`.
+9. Verifies build-node checkpoints before PXE test:
+   - `dnsmasq`, `nginx`, `tftpd-hpa`, and `av-debug-collector` are active
+   - `/boot.ipxe`, `vmlinuz`, `initrd`, and the client ISO return `200`
+   - the published asset files exist and have content
+10. Starts a fresh `av-pxe-uefi-test-vm`.
+11. Verifies that the PXE client reservation appears on `192.168.50.184`.
+12. Verifies nginx access logs show the PXE client fetched:
+   - `/boot.ipxe`
+   - `/images/ubuntu-live-av-client-test/vmlinuz`
+   - `/images/ubuntu-live-av-client-test/initrd`
+   - `/artifacts/ubuntu-26.04-av-client-test-amd64.iso`
 
 ## Important prerequisites
 
@@ -42,7 +51,8 @@ python .\tools\rebuild_hyperv_lab.py
 
 ## Expected fresh-state addresses
 
-- `av-control-node`: `172.23.23.27`
-- `av-repo-vm`: `172.23.27.229`
-- `av-build-vm`: `172.23.30.254`
+- `av-control-node`: current Hyper-V `Default Switch` DHCP lease discovered from fixed MAC `00:15:5d:01:1c:08`
+- `av-repo-vm`: current Hyper-V `Default Switch` DHCP lease discovered from fixed MAC `00:15:5d:01:1c:09`
+- `av-build-vm`: current Hyper-V `Default Switch` DHCP lease discovered from fixed MAC `00:15:5d:01:1c:0a`
+- `av-build-vm` PXE side: `192.168.50.2`
 - `av-pxe-client` reserved PXE lease: `192.168.50.184`

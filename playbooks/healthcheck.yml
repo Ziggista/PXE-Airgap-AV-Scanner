@@ -107,11 +107,25 @@
         url: "{{ item }}"
         status_code: 200
       loop:
+        - "http://127.0.0.1/boot.ipxe"
         - "http://127.0.0.1/artifacts/{{ pxe_server_boot_iso_filename }}"
         - "http://127.0.0.1/{{ pxe_server_boot_kernel_path }}"
         - "http://127.0.0.1/{{ pxe_server_boot_initrd_path }}"
         - "http://127.0.0.1/definitions/clamav/"
       register: build_vm_local_uri_checks
+      changed_when: false
+
+    - name: Check iPXE boot script contents
+      ansible.builtin.slurp:
+        path: "{{ pxe_root }}/boot.ipxe"
+      register: build_vm_boot_ipxe
+
+    - name: Check scheduled PXE maintenance timers
+      ansible.builtin.command: systemctl is-active {{ item }}
+      loop:
+        - pxe-definition-refresh.timer
+        - pxe-client-rebuild.timer
+      register: build_vm_timer_checks
       changed_when: false
 
     - name: Check PXE build can reach proxy definitions
@@ -151,6 +165,8 @@
           - ansible_facts.services['tftpd-hpa.service'].state == 'running'
           - ansible_facts.services['av-debug-collector.service'].state == 'running'
           - build_vm_local_uri_checks.results | map(attribute='status') | min == 200
+          - "'kernel http://192.168.50.2/images/ubuntu-live-av-client-test/vmlinuz' in (build_vm_boot_ipxe.content | b64decode)"
+          - build_vm_timer_checks.results | map(attribute='stdout') | unique == ['active']
           - build_vm_proxy_uri_check.status == 200
           - build_vm_artifact_stats.results | selectattr('stat.exists', 'equalto', false) | list | length == 0
           - build_vm_engine_bundle_stats.results | selectattr('stat.exists', 'equalto', false) | list | length == 0

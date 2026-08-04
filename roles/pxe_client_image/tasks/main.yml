@@ -602,5 +602,24 @@
       ansible.builtin.assert:
         that:
           - item.stat.exists
+          - (item.stat.size | int) > 0
         fail_msg: "Expected published PXE asset is missing: {{ item.stat.path }}"
       loop: "{{ pxe_client_asset_stats.results }}"
+
+    - name: Verify published PXE client assets over local HTTP
+      ansible.builtin.uri:
+        url: "{{ item }}"
+        status_code: 200
+      loop:
+        - "http://127.0.0.1/boot.ipxe"
+        - "http://127.0.0.1/artifacts/{{ pxe_server_boot_iso_filename }}"
+        - "http://127.0.0.1/{{ pxe_server_boot_kernel_path }}"
+        - "http://127.0.0.1/{{ pxe_server_boot_initrd_path }}"
+      register: pxe_client_http_asset_checks
+      changed_when: false
+
+    - name: Assert published PXE client HTTP endpoints are ready
+      ansible.builtin.assert:
+        that:
+          - pxe_client_http_asset_checks.results | map(attribute='status') | min == 200
+        fail_msg: PXE client assets were built but are not yet reachable over local HTTP.

@@ -161,6 +161,11 @@ def _run_remote(private_key: Path, host: str, command: str) -> None:
     _run(_ssh_base(private_key) + [f"ziggi-py@{host}", command])
 
 
+def _run_remote_capture(private_key: Path, host: str, command: str) -> str:
+    result = _run(_ssh_base(private_key) + [f"ziggi-py@{host}", command], capture_output=True)
+    return result.stdout
+
+
 def _remote_shell_quote(value: str) -> str:
     return shlex.quote(value)
 
@@ -503,12 +508,61 @@ def verify_pxe_reservation(private_key: Path, build_ip: str, timeout_seconds: in
     raise HyperVLabError(f"Timed out waiting for PXE client DHCP reservation {expected}.")
 
 
+def reset_pxe_boot_observation(private_key: Path, build_ip: str) -> None:
+    command = (
+        "sudo sh -c "
+        "\"truncate -s 0 /var/log/nginx/access.log && "
+        "truncate -s 0 /var/log/nginx/error.log\""
+    )
+    _run_remote(private_key, build_ip, command)
+
+
+def verify_build_vm_checkpoints(private_key: Path, build_ip: str) -> str:
+    command = " && ".join(
+        [
+            "sudo systemctl is-active dnsmasq nginx tftpd-hpa av-debug-collector",
+            "curl -fsS http://127.0.0.1/boot.ipxe >/tmp/boot.ipxe.check",
+            "grep -q 'kernel http://192.168.50.2/images/ubuntu-live-av-client-test/vmlinuz' /tmp/boot.ipxe.check",
+            "curl -fsSI http://127.0.0.1/images/ubuntu-live-av-client-test/vmlinuz",
+            "curl -fsSI http://127.0.0.1/images/ubuntu-live-av-client-test/initrd",
+            "curl -fsSI http://127.0.0.1/artifacts/ubuntu-26.04-av-client-test-amd64.iso",
+            "stat -c '%n %s' "
+            "/srv/pxe/boot.ipxe "
+            "/srv/pxe/images/ubuntu-live-av-client-test/vmlinuz "
+            "/srv/pxe/images/ubuntu-live-av-client-test/initrd "
+            "/srv/pxe/artifacts/ubuntu-26.04-av-client-test-amd64.iso",
+        ]
+    )
+    return _run_remote_capture(private_key, build_ip, command)
+
+
+def verify_pxe_http_boot_trace(private_key: Path, build_ip: str, timeout_seconds: int = 300) -> str:
+    expected_paths = (
+        "/boot.ipxe",
+        "/images/ubuntu-live-av-client-test/vmlinuz",
+        "/images/ubuntu-live-av-client-test/initrd",
+        "/artifacts/ubuntu-26.04-av-client-test-amd64.iso",
+    )
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        access_log = _run_remote_capture(private_key, build_ip, "sudo cat /var/log/nginx/access.log || true")
+        if all(path in access_log for path in expected_paths):
+            return access_log
+        time.sleep(10)
+    raise HyperVLabError(
+        "Timed out waiting for PXE HTTP boot trace to include "
+        f"{', '.join(expected_paths)}."
+    )
+
+
 def write_summary(
     repo_root: Path,
     rotated: dict[str, str],
     seeds: dict[str, Path],
     discovered_ips: dict[str, str],
     lease_snapshot: str,
+    build_vm_checkpoint_snapshot: str,
+    pxe_http_trace: str,
 ) -> Path:
     docs_dir = repo_root / "docs"
     docs_dir.mkdir(parents=True, exist_ok=True)
@@ -541,7 +595,29 @@ def write_summary(
     lines.extend(["", "## Seed ISOs", ""])
     for seed_name, seed_path in seeds.items():
         lines.append(f"- `{seed_name}`: `{seed_path}`")
-    lines.extend(["", "## PXE Lease Snapshot", "", "```text", lease_snapshot.rstrip(), "```", ""])
+    lines.extend(
+        [
+            "",
+            "## Build VM Readiness Checkpoints",
+            "",
+            "```text",
+            build_vm_checkpoint_snapshot.rstrip(),
+            "```",
+            "",
+            "## PXE Lease Snapshot",
+            "",
+            "```text",
+            lease_snapshot.rstrip(),
+            "```",
+            "",
+            "## PXE HTTP Boot Trace",
+            "",
+            "```text",
+            pxe_http_trace.rstrip(),
+            "```",
+            "",
+        ]
+    )
     summary_path.write_text("\n".join(lines), encoding="utf-8")
     return summary_path
 
@@ -575,7 +651,7 @@ def main() -> None:
         wait_for_tcp(discovered_ips[host_name], 22, timeout_seconds=900)
 
     if not args.skip_deploy:
-        deploy_from_control_node(
+        discovered_ips = deploy_from_control_node(
             repo_root,
             private_key,
             control_ip=discovered_ips["av-control-node"],
@@ -583,9 +659,20 @@ def main() -> None:
             branch=args.branch,
         )
 
+    build_vm_checkpoint_snapshot = verify_build_vm_checkpoints(private_key, build_ip=discovered_ips["av-build-vm"])
+    reset_pxe_boot_observation(private_key, build_ip=discovered_ips["av-build-vm"])
     start_vms([PXE_TEST_SPEC.name])
     lease_snapshot = verify_pxe_reservation(private_key, build_ip=discovered_ips["av-build-vm"])
-    summary_path = write_summary(repo_root, rotated, seeds, discovered_ips, lease_snapshot)
+    pxe_http_trace = verify_pxe_http_boot_trace(private_key, build_ip=discovered_ips["av-build-vm"])
+    summary_path = write_summary(
+        repo_root,
+        rotated,
+        seeds,
+        discovered_ips,
+        lease_snapshot,
+        build_vm_checkpoint_snapshot,
+        pxe_http_trace,
+    )
     print(f"Fresh lab rebuild summary written to: {summary_path}")
 
 
