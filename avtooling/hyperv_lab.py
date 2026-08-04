@@ -411,6 +411,28 @@ def wait_for_inventory_discovery(
     raise HyperVLabError(f"Timed out discovering Hyper-V management IPs ({last_error})")
 
 
+def wait_for_reachable_inventory_host(
+    repo_root: Path,
+    inventory_host: str,
+    port: int = 22,
+    timeout_seconds: int = 900,
+) -> tuple[str, dict[str, str]]:
+    deadline = time.time() + timeout_seconds
+    last_error: Exception | None = None
+    while time.time() < deadline:
+        try:
+            discovered = wait_for_inventory_discovery(repo_root, timeout_seconds=60)
+            host_ip = discovered[inventory_host]
+            with socket.create_connection((host_ip, port), timeout=5):
+                return host_ip, discovered
+        except Exception as exc:
+            last_error = exc
+            time.sleep(10)
+    raise HyperVLabError(
+        f"Timed out waiting for reachable inventory host {inventory_host}:{port} ({last_error})"
+    )
+
+
 def deploy_from_control_node(
     repo_root: Path,
     private_key: Path,
@@ -476,10 +498,13 @@ def deploy_from_control_node(
         f"cd {_remote_shell_quote(remote_repo_root)} && ansible-playbook -i inventories/lab/hosts.yml playbooks/build-vm.yml",
     )
 
-    refreshed_ips = wait_for_inventory_discovery(repo_root)
-    refreshed_control_ip = refreshed_ips["av-control-node"]
+    refreshed_control_ip, refreshed_ips = wait_for_reachable_inventory_host(
+        repo_root, "av-control-node", timeout_seconds=900
+    )
     _run(_scp_base(private_key) + [str(inventory_file), f"ziggi-py@{refreshed_control_ip}:{remote_inventory}"])
-    wait_for_tcp(refreshed_ips["av-build-vm"], 22, timeout_seconds=900)
+    build_vm_ip, refreshed_ips = wait_for_reachable_inventory_host(
+        repo_root, "av-build-vm", timeout_seconds=900
+    )
     _run_remote(
         private_key,
         refreshed_control_ip,
