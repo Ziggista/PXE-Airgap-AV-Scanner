@@ -9,12 +9,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from avtooling.hyperv_inventory import (  # noqa: E402
     HyperVInventoryError,
     discover_vm_addresses,
-    update_inventory_hosts_file,
+    write_inventory_overlay,
 )
-
-
-def default_inventory_path() -> Path:
-    return Path(__file__).resolve().parents[1] / "inventories" / "lab" / "hosts.yml"
+def default_overlay_path() -> Path:
+    return Path(__file__).resolve().parents[1] / "runtime" / "generated" / "hyperv-dhcp-hosts.yml"
 
 
 def main() -> None:
@@ -22,22 +20,22 @@ def main() -> None:
         description="Resolve Hyper-V guest IPs after reboot and optionally update the Ansible lab inventory."
     )
     parser.add_argument(
-        "--inventory",
-        default=str(default_inventory_path()),
-        help="Path to the Ansible hosts.yml inventory file.",
+        "--overlay-out",
+        default=str(default_overlay_path()),
+        help="Path to the generated DHCP overlay inventory file.",
     )
     parser.add_argument(
         "--check",
         action="store_true",
-        help="Only print discovered IPs. Do not modify the inventory file.",
+        help="Only print discovered IPs. Do not modify the generated overlay file.",
     )
     args = parser.parse_args()
 
-    inventory_path = Path(args.inventory).resolve()
+    overlay_path = Path(args.overlay_out).resolve()
 
     try:
         addresses = discover_vm_addresses()
-        changed = False if args.check else update_inventory_hosts_file(inventory_path, addresses)
+        changed = False if args.check else write_inventory_overlay(overlay_path, addresses)
     except HyperVInventoryError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
@@ -49,10 +47,10 @@ def main() -> None:
         )
 
     if args.check:
-        print(f"Inventory left unchanged: {inventory_path}")
+        print(f"Overlay left unchanged: {overlay_path}")
     else:
         status = "updated" if changed else "already current"
-        print(f"Inventory {status}: {inventory_path}")
+        print(f"Overlay {status}: {overlay_path}")
 
 
 if __name__ == "__main__":

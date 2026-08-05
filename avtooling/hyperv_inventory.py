@@ -223,3 +223,35 @@ def update_inventory_hosts_file(path: Path, addresses: list[VmAddress]) -> bool:
     if changed:
         path.write_text(updated, encoding="utf-8")
     return changed
+
+
+def render_inventory_overlay(addresses: list[VmAddress]) -> str:
+    grouped = {
+        "av-control-node": "control_node",
+        "av-repo-vm": "repo_vm",
+        "av-build-vm": "build_vm",
+    }
+    lines = ["all:", "  children:"]
+    for address in sorted(addresses, key=lambda item: item.inventory_host):
+        group = grouped.get(address.inventory_host)
+        if not group:
+            continue
+        lines.extend(
+            [
+                f"    {group}:",
+                "      hosts:",
+                f"        {address.inventory_host}:",
+                f"          ansible_host: {address.ip_address}",
+            ]
+        )
+    return "\n".join(lines) + "\n"
+
+
+def write_inventory_overlay(path: Path, addresses: list[VmAddress]) -> bool:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rendered = render_inventory_overlay(addresses)
+    current = path.read_text(encoding="utf-8") if path.exists() else None
+    if current == rendered:
+        return False
+    path.write_text(rendered, encoding="utf-8")
+    return True

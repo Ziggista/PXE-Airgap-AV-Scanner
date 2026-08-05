@@ -10,7 +10,11 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 
 from avtooling.cloudinit_iso import build_cloudinit_iso
-from avtooling.hyperv_inventory import HyperVInventoryError, discover_vm_addresses, update_inventory_hosts_file
+from avtooling.hyperv_inventory import (
+    HyperVInventoryError,
+    discover_vm_addresses,
+    write_inventory_overlay,
+)
 from avtooling.local_repo import require_command
 
 
@@ -23,6 +27,7 @@ DEFAULT_BASE_VHDX = Path(r"D:\AV\cloud-images\ubuntu-26.04-server-cloudimg-amd64
 DEFAULT_REPO_URL = "https://github.com/Ziggista/PXE-Airgap-AV-Scanner.git"
 DEFAULT_BRANCH = "main"
 DEFAULT_REMOTE_REPO_ROOT = "/opt/av-pxe-tooling"
+DEFAULT_RUNTIME_INVENTORY_OVERLAY = Path("runtime/generated/hyperv-dhcp-hosts.yml")
 
 
 @dataclass(frozen=True)
@@ -168,6 +173,10 @@ def _run_remote_capture(private_key: Path, host: str, command: str) -> str:
 
 def _copy_remote_inventory(private_key: Path, control_ip: str, inventory_file: Path, remote_inventory: str) -> None:
     _run(_scp_base(private_key) + [str(inventory_file), f"ziggi-py@{control_ip}:{remote_inventory}"])
+
+
+def _copy_remote_file(private_key: Path, control_ip: str, local_path: Path, remote_path: str) -> None:
+    _run(_scp_base(private_key) + [str(local_path), f"ziggi-py@{control_ip}:{remote_path}"])
 
 
 def _remote_shell_quote(value: str) -> str:
@@ -399,7 +408,7 @@ def wait_for_inventory_discovery(
     timeout_seconds: int = 900,
 ) -> dict[str, str]:
     deadline = time.time() + timeout_seconds
-    inventory_path = repo_root / "inventories" / "lab" / "hosts.yml"
+    overlay_path = repo_root / DEFAULT_RUNTIME_INVENTORY_OVERLAY
     last_error: Exception | None = None
     while time.time() < deadline:
         try:
@@ -407,7 +416,7 @@ def wait_for_inventory_discovery(
             discovered = {address.inventory_host: address.ip_address for address in addresses}
             required_hosts = {"av-control-node", "av-repo-vm", "av-build-vm"}
             if required_hosts.issubset(discovered):
-                update_inventory_hosts_file(inventory_path, addresses)
+                write_inventory_overlay(overlay_path, addresses)
                 return discovered
         except HyperVInventoryError as exc:
             last_error = exc
@@ -447,8 +456,10 @@ def deploy_from_control_node(
 ) -> dict[str, str]:
     license_file = repo_root / "inventories" / "lab" / "group_vars" / "all" / "license_acceptance.yml"
     inventory_file = repo_root / "inventories" / "lab" / "hosts.yml"
+    overlay_file = repo_root / DEFAULT_RUNTIME_INVENTORY_OVERLAY
     remote_license = f"{remote_repo_root}/inventories/lab/group_vars/all/license_acceptance.yml"
     remote_inventory = f"{remote_repo_root}/inventories/lab/hosts.yml"
+    remote_overlay = f"{remote_repo_root}/runtime/generated/hyperv-dhcp-hosts.yml"
     public_key = private_key.with_suffix(".pub")
     upstream_iso = repo_root / "runtime" / "downloads" / "ubuntu-26.04-desktop-amd64.iso"
     remote_upstream_iso = f"{remote_repo_root}/runtime/downloads/{upstream_iso.name}"
@@ -463,6 +474,7 @@ def deploy_from_control_node(
             f"sudo chown ziggi-py:ziggi-py {_remote_shell_quote(remote_repo_parent)}",
             f"git clone --branch {_remote_shell_quote(branch)} {_remote_shell_quote(repo_url)} {_remote_shell_quote(remote_repo_root)}",
             f"mkdir -p {_remote_shell_quote(f'{remote_repo_root}/runtime/downloads')}",
+            f"mkdir -p {_remote_shell_quote(f'{remote_repo_root}/runtime/generated')}",
             f"mkdir -p {_remote_shell_quote(f'{remote_repo_root}/inventories/lab/group_vars/all')}",
             "mkdir -p ~/.ssh",
         ]
@@ -472,6 +484,7 @@ def deploy_from_control_node(
     _run(_scp_base(private_key) + [str(private_key), f"ziggi-py@{control_ip}:~/.ssh/ziggi-py-host-ed25519"])
     _run(_scp_base(private_key) + [str(public_key), f"ziggi-py@{control_ip}:~/.ssh/ziggi-py-host-ed25519.pub"])
     _copy_remote_inventory(private_key, control_ip, inventory_file, remote_inventory)
+    _copy_remote_file(private_key, control_ip, overlay_file, remote_overlay)
     _run(_scp_base(private_key) + [str(license_file), f"ziggi-py@{control_ip}:{remote_license}"])
     _run(_scp_base(private_key) + [str(upstream_iso), f"ziggi-py@{control_ip}:{remote_upstream_iso}"])
 
@@ -489,33 +502,61 @@ def deploy_from_control_node(
     _run_remote(
         private_key,
         control_ip,
-        f"cd {_remote_shell_quote(remote_repo_root)} && ansible-playbook -i inventories/lab/hosts.yml playbooks/control-node.yml",
+        " && ".join(
+            [
+                f"cd {_remote_shell_quote(remote_repo_root)}",
+                "ansible-playbook -i inventories/lab/hosts.yml -i runtime/generated/hyperv-dhcp-hosts.yml "
+                "playbooks/control-node.yml",
+            ]
+        ),
     )
     _copy_remote_inventory(private_key, control_ip, inventory_file, remote_inventory)
+    _copy_remote_file(private_key, control_ip, overlay_file, remote_overlay)
     _run_remote(
         private_key,
         control_ip,
-        f"cd {_remote_shell_quote(remote_repo_root)} && ansible-playbook -i inventories/lab/hosts.yml playbooks/repo-vm.yml",
+        " && ".join(
+            [
+                f"cd {_remote_shell_quote(remote_repo_root)}",
+                "ansible-playbook -i inventories/lab/hosts.yml -i runtime/generated/hyperv-dhcp-hosts.yml "
+                "playbooks/repo-vm.yml",
+            ]
+        ),
     )
     _copy_remote_inventory(private_key, control_ip, inventory_file, remote_inventory)
+    _copy_remote_file(private_key, control_ip, overlay_file, remote_overlay)
     _run_remote(
         private_key,
         control_ip,
-        f"cd {_remote_shell_quote(remote_repo_root)} && ansible-playbook -i inventories/lab/hosts.yml playbooks/build-vm.yml",
+        " && ".join(
+            [
+                f"cd {_remote_shell_quote(remote_repo_root)}",
+                "ansible-playbook -i inventories/lab/hosts.yml -i runtime/generated/hyperv-dhcp-hosts.yml "
+                "playbooks/build-vm.yml",
+            ]
+        ),
     )
 
     refreshed_control_ip, refreshed_ips = wait_for_reachable_inventory_host(
         repo_root, "av-control-node", timeout_seconds=900
     )
     _copy_remote_inventory(private_key, refreshed_control_ip, inventory_file, remote_inventory)
+    _copy_remote_file(private_key, refreshed_control_ip, overlay_file, remote_overlay)
     build_vm_ip, refreshed_ips = wait_for_reachable_inventory_host(
         repo_root, "av-build-vm", timeout_seconds=900
     )
     _copy_remote_inventory(private_key, refreshed_control_ip, inventory_file, remote_inventory)
+    _copy_remote_file(private_key, refreshed_control_ip, overlay_file, remote_overlay)
     _run_remote(
         private_key,
         refreshed_control_ip,
-        f"cd {_remote_shell_quote(remote_repo_root)} && ansible-playbook -i inventories/lab/hosts.yml playbooks/build-pxe-client-assets.yml",
+        " && ".join(
+            [
+                f"cd {_remote_shell_quote(remote_repo_root)}",
+                "ansible-playbook -i inventories/lab/hosts.yml -i runtime/generated/hyperv-dhcp-hosts.yml "
+                "playbooks/build-pxe-client-assets.yml",
+            ]
+        ),
     )
     refreshed_control_ip, refreshed_ips = wait_for_reachable_inventory_host(
         repo_root, "av-control-node", timeout_seconds=300
@@ -524,10 +565,17 @@ def deploy_from_control_node(
         repo_root, "av-build-vm", timeout_seconds=300
     )
     _copy_remote_inventory(private_key, refreshed_control_ip, inventory_file, remote_inventory)
+    _copy_remote_file(private_key, refreshed_control_ip, overlay_file, remote_overlay)
     _run_remote(
         private_key,
         refreshed_control_ip,
-        f"cd {_remote_shell_quote(remote_repo_root)} && ansible-playbook -i inventories/lab/hosts.yml playbooks/healthcheck.yml",
+        " && ".join(
+            [
+                f"cd {_remote_shell_quote(remote_repo_root)}",
+                "ansible-playbook -i inventories/lab/hosts.yml -i runtime/generated/hyperv-dhcp-hosts.yml "
+                "playbooks/healthcheck.yml",
+            ]
+        ),
     )
     return refreshed_ips
 
@@ -616,7 +664,7 @@ def write_summary(
         "- Rotated the existing Hyper-V lab VMs by renaming them with an `.old.<timestamp>` suffix.",
         "- Rebuilt fresh `cidata` seed ISOs for `control-node`, `repo-vm`, and `build-vm`.",
         "- Created fresh Hyper-V VMs from the Ubuntu 26.04 cloud-image VHDX with fixed MAC addresses.",
-        "- Brought the server VMs up on Hyper-V `Default Switch` DHCP, then rediscovered and rewrote the Ansible inventory from their fixed MAC addresses.",
+        "- Brought the server VMs up on Hyper-V `Default Switch` DHCP, then generated a fresh DHCP overlay inventory from their fixed MAC addresses.",
         "- Deployed `control-node`, `repo-vm`, `build-vm`, PXE assets, and healthchecks from a clean clone on the control node.",
         "- Started a fresh `av-pxe-uefi-test-vm` and verified the reserved PXE lease.",
         "",

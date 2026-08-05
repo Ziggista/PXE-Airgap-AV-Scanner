@@ -47,9 +47,9 @@ python .\tools\update_local_repo.py
 
 ## Hyper-V inventory refresh
 
-The tracked Hyper-V lab now treats `Default Switch` as DHCP-only management transport. The server VMs keep fixed MAC addresses, and the repo refreshes `inventories/lab/hosts.yml` from the live Hyper-V neighbor table before deployment.
+The tracked Hyper-V lab treats `Default Switch` as DHCP-only management transport. The server VMs keep fixed MAC addresses, and the repo now generates a gitignored DHCP overlay inventory from the live Hyper-V neighbor table before deployment.
 
-Use the local helper to discover the current `Default Switch` leases and patch [inventories/lab/hosts.yml](C:/Users/Ziggi/AV/inventories/lab/hosts.yml):
+The committed base inventory remains [inventories/lab/hosts.yml](C:/Users/Ziggi/AV/inventories/lab/hosts.yml). Live DHCP addresses are written to `runtime/generated/hyperv-dhcp-hosts.yml` and supplied to every `ansible-playbook` run as a second inventory source.
 
 Use the local helper before Ansible runs if a lab VM becomes unreachable:
 
@@ -71,7 +71,7 @@ This workflow:
 - rotates the existing lab VMs by renaming them with an `.old.<timestamp>` suffix
 - rebuilds the `cidata` seed ISOs for `control-node`, `repo-vm`, and `build-vm`
 - recreates fresh Hyper-V VMs with fixed MAC addresses and DHCP first-boot management networking on `Default Switch`
-- refreshes the Ansible inventory from the live Hyper-V neighbor table before any SSH/Ansible work starts
+- generates and refreshes the DHCP overlay inventory from the live Hyper-V neighbor table before any SSH/Ansible work starts
 - copies the local automation SSH keypair into the fresh control node so Ansible can reach the proxy and build guests
 - deploys the control node, proxy node, PXE build node, PXE assets, and healthchecks from a clean clone on the control node
 - verifies build-node readiness checkpoints for services, HTTP endpoints, and published PXE artifacts before the PXE client test starts
